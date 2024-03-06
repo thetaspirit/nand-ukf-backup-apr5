@@ -16,13 +16,14 @@ typedef BLA::Matrix<INPUT_SPACE_DIM> input_vector_t;
 struct params_t
 {
   float wheelbase;
-  float sigma_point;
 };
 
 class UKF
 {
 private:
   params_t params;
+  float zeroth_sigma_point_weight;
+
   state_cov_matrix_t process_noise;
   measurement_cov_matrix_t sensor_noise;
 
@@ -33,7 +34,9 @@ private:
   measurement_cov_matrix_t square_root(measurement_cov_matrix_t matrix);
 
   state_vector_t *generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance);
+  // uses zeroth sigma point weight
   measurement_vector_t *generate_sigmas(measurement_vector_t mean, measurement_cov_matrix_t covariance);
+  // uses zeroth sigma point weight
 
   measurement_vector_t state_to_measurement(state_vector_t vector);
   state_vector_t measurement_to_state(measurement_vector_t vector);
