@@ -30,6 +30,7 @@
 
 #include "gps.h"
 #include "buggyradio.h"
+#include "ukf.h"
 
 #include <Arduino.h>
 #include <Wire.h> //Needed for I2C to GPS
@@ -42,8 +43,8 @@
 Adafruit_BNO08x bno08x;
 sh2_SensorValue_t sensorValue;
 
-//#include "SparkFun_Ublox_Arduino_Library.h" //http://librarymanager/All#SparkFun_u-blox_GNSS
-//SFE_UBLOX_GPS myGPS;
+// #include "SparkFun_Ublox_Arduino_Library.h" //http://librarymanager/All#SparkFun_u-blox_GNSS
+// SFE_UBLOX_GPS myGPS;
 
 /**  @file
 
@@ -73,39 +74,51 @@ uint64_t positivePow(uint64_t base, uint64_t power)
   return result;
 }
 
-void setReports(void) {
+void setReports(void)
+{
   Serial.println("Setting desired reports");
-  if (!bno08x.enableReport(SH2_ACCELEROMETER)) {
+  if (!bno08x.enableReport(SH2_ACCELEROMETER))
+  {
     Serial.println("Could not enable accelerometer");
   }
-  if (!bno08x.enableReport(SH2_GYROSCOPE_CALIBRATED)) {
+  if (!bno08x.enableReport(SH2_GYROSCOPE_CALIBRATED))
+  {
     Serial.println("Could not enable gyroscope");
   }
-  if (!bno08x.enableReport(SH2_MAGNETIC_FIELD_CALIBRATED)) {
+  if (!bno08x.enableReport(SH2_MAGNETIC_FIELD_CALIBRATED))
+  {
     Serial.println("Could not enable magnetic field calibrated");
   }
-  if (!bno08x.enableReport(SH2_LINEAR_ACCELERATION)) {
+  if (!bno08x.enableReport(SH2_LINEAR_ACCELERATION))
+  {
     Serial.println("Could not enable linear acceleration");
   }
-  if (!bno08x.enableReport(SH2_GRAVITY)) {
+  if (!bno08x.enableReport(SH2_GRAVITY))
+  {
     Serial.println("Could not enable gravity vector");
   }
-  if (!bno08x.enableReport(SH2_ROTATION_VECTOR)) {
+  if (!bno08x.enableReport(SH2_ROTATION_VECTOR))
+  {
     Serial.println("Could not enable rotation vector");
   }
-  if (!bno08x.enableReport(SH2_GEOMAGNETIC_ROTATION_VECTOR)) {
+  if (!bno08x.enableReport(SH2_GEOMAGNETIC_ROTATION_VECTOR))
+  {
     Serial.println("Could not enable geomagnetic rotation vector");
   }
-  if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR)) {
+  if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR))
+  {
     Serial.println("Could not enable game rotation vector");
   }
-  if (!bno08x.enableReport(SH2_RAW_ACCELEROMETER)) {
+  if (!bno08x.enableReport(SH2_RAW_ACCELEROMETER))
+  {
     Serial.println("Could not enable raw accelerometer");
   }
-  if (!bno08x.enableReport(SH2_RAW_GYROSCOPE)) {
+  if (!bno08x.enableReport(SH2_RAW_GYROSCOPE))
+  {
     Serial.println("Could not enable raw gyroscope");
   }
-  if (!bno08x.enableReport(SH2_RAW_MAGNETOMETER)) {
+  if (!bno08x.enableReport(SH2_RAW_MAGNETOMETER))
+  {
     Serial.println("Could not enable raw magnetometer");
   }
 }
@@ -117,12 +130,14 @@ void setup()
 
   Wire.begin();
 
-  if (!bno08x.begin_I2C()) {
+  if (!bno08x.begin_I2C())
+  {
     while (1)
       Serial.println("BNO085 not detected over I2C. Freezing");
   }
 
-  if (!SD.begin(BUILTIN_SDCARD)) {
+  if (!SD.begin(BUILTIN_SDCARD))
+  {
     while (1)
       Serial.println("SD card not detected. Freezing");
   }
@@ -143,10 +158,12 @@ void loop()
 {
   int fileNum = 0;
   char fileName[100];
-  while (true) {
+  while (true)
+  {
     snprintf(fileName, 100, "log%d.txt", fileNum);
 
-    if (!SD.exists(fileName)) {
+    if (!SD.exists(fileName))
+    {
       break;
     }
 
@@ -154,7 +171,8 @@ void loop()
   }
   File f = SD.open(fileName, FILE_WRITE);
 
-  if (!f) {
+  if (!f)
+  {
     while (1)
       Serial.println("File not created. Freezing");
   }
@@ -163,117 +181,112 @@ void loop()
 
   unsigned long last_imu_update = millis();
 
-  while (1) {
-    //myGPS.checkUblox(); // See if new data is available. Process bytes as they come in.
+  while (1)
+  {
+    // myGPS.checkUblox(); // See if new data is available. Process bytes as they come in.
 
-    if (auto gps_coord = gps_update()) {
+    if (auto gps_coord = gps_update())
+    {
       radio_send_gps(gps_coord->x, gps_coord->y, gps_coord->gps_time, gps_coord->fix);
     }
 
-    if (millis() - last_imu_update > 5) {
+    if (millis() - last_imu_update > 5)
+    {
       last_imu_update = millis();
 
-      if (bno08x.wasReset()) {
+      if (bno08x.wasReset())
+      {
         Serial.print("sensor was reset ");
         setReports();
       }
 
-      if (bno08x.getSensorEvent(&sensorValue)) {
+      if (bno08x.getSensorEvent(&sensorValue))
+      {
         Serial.println("Logging IMU event");
 
         f.printf("t: %lu, IMU ", millis());
-        switch (sensorValue.sensorId) {
+        switch (sensorValue.sensorId)
+        {
 
         case SH2_ACCELEROMETER:
           f.printf(
-            "Accelerometer - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.accelerometer.x,
-            (double)sensorValue.un.accelerometer.y,
-            (double)sensorValue.un.accelerometer.z
-          );
+              "Accelerometer - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.accelerometer.x,
+              (double)sensorValue.un.accelerometer.y,
+              (double)sensorValue.un.accelerometer.z);
           break;
         case SH2_GYROSCOPE_CALIBRATED:
           f.printf(
-            "Gyro - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.gyroscope.x,
-            (double)sensorValue.un.gyroscope.y,
-            (double)sensorValue.un.gyroscope.z
-          );
+              "Gyro - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.gyroscope.x,
+              (double)sensorValue.un.gyroscope.y,
+              (double)sensorValue.un.gyroscope.z);
           break;
         case SH2_MAGNETIC_FIELD_CALIBRATED:
           f.printf(
-            "Magnetic Field - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.magneticField.x,
-            (double)sensorValue.un.magneticField.y,
-            (double)sensorValue.un.magneticField.z
-          );
+              "Magnetic Field - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.magneticField.x,
+              (double)sensorValue.un.magneticField.y,
+              (double)sensorValue.un.magneticField.z);
           break;
         case SH2_LINEAR_ACCELERATION:
           f.printf(
-            "Linear Acceleration - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.linearAcceleration.x,
-            (double)sensorValue.un.linearAcceleration.y,
-            (double)sensorValue.un.linearAcceleration.z
-          );
+              "Linear Acceleration - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.linearAcceleration.x,
+              (double)sensorValue.un.linearAcceleration.y,
+              (double)sensorValue.un.linearAcceleration.z);
           break;
         case SH2_GRAVITY:
           f.printf(
-            "Gravity - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.gravity.x,
-            (double)sensorValue.un.gravity.y,
-            (double)sensorValue.un.gravity.z
-          );
+              "Gravity - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.gravity.x,
+              (double)sensorValue.un.gravity.y,
+              (double)sensorValue.un.gravity.z);
           break;
         case SH2_ROTATION_VECTOR:
           f.printf(
-            "Rotation Vector - r: %f i: %f j: %f k: %f\n",
-            (double)sensorValue.un.rotationVector.real,
-            (double)sensorValue.un.rotationVector.i,
-            (double)sensorValue.un.rotationVector.j,
-            (double)sensorValue.un.rotationVector.k
-          );
+              "Rotation Vector - r: %f i: %f j: %f k: %f\n",
+              (double)sensorValue.un.rotationVector.real,
+              (double)sensorValue.un.rotationVector.i,
+              (double)sensorValue.un.rotationVector.j,
+              (double)sensorValue.un.rotationVector.k);
           break;
         case SH2_GEOMAGNETIC_ROTATION_VECTOR:
           f.printf(
-            "Geo-Magnetic Rotation Vector - r: %f i: %f j: %f k: %f\n",
-            (double)sensorValue.un.geoMagRotationVector.real,
-            (double)sensorValue.un.geoMagRotationVector.i,
-            (double)sensorValue.un.geoMagRotationVector.j,
-            (double)sensorValue.un.geoMagRotationVector.k
-          );
+              "Geo-Magnetic Rotation Vector - r: %f i: %f j: %f k: %f\n",
+              (double)sensorValue.un.geoMagRotationVector.real,
+              (double)sensorValue.un.geoMagRotationVector.i,
+              (double)sensorValue.un.geoMagRotationVector.j,
+              (double)sensorValue.un.geoMagRotationVector.k);
           break;
         case SH2_GAME_ROTATION_VECTOR:
           f.printf(
-            "Game Rotation Vector - r: %f i: %f j: %f k: %f\n",
-            (double)sensorValue.un.gameRotationVector.real,
-            (double)sensorValue.un.gameRotationVector.i,
-            (double)sensorValue.un.gameRotationVector.j,
-            (double)sensorValue.un.gameRotationVector.k
-          );
+              "Game Rotation Vector - r: %f i: %f j: %f k: %f\n",
+              (double)sensorValue.un.gameRotationVector.real,
+              (double)sensorValue.un.gameRotationVector.i,
+              (double)sensorValue.un.gameRotationVector.j,
+              (double)sensorValue.un.gameRotationVector.k);
           break;
         case SH2_RAW_ACCELEROMETER:
           f.printf(
-            "Raw Accelerometer - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.rawAccelerometer.x,
-            (double)sensorValue.un.rawAccelerometer.y,
-            (double)sensorValue.un.rawAccelerometer.z
-          );
+              "Raw Accelerometer - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.rawAccelerometer.x,
+              (double)sensorValue.un.rawAccelerometer.y,
+              (double)sensorValue.un.rawAccelerometer.z);
           break;
         case SH2_RAW_GYROSCOPE:
           f.printf(
-            "Raw Gyro - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.rawGyroscope.x,
-            (double)sensorValue.un.rawGyroscope.y,
-            (double)sensorValue.un.rawGyroscope.z
-          );
+              "Raw Gyro - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.rawGyroscope.x,
+              (double)sensorValue.un.rawGyroscope.y,
+              (double)sensorValue.un.rawGyroscope.z);
           break;
         case SH2_RAW_MAGNETOMETER:
           f.printf(
-            "Raw Magnetic Field - x: %f y: %f z: %f\n",
-            (double)sensorValue.un.rawMagnetometer.x,
-            (double)sensorValue.un.rawMagnetometer.y,
-            (double)sensorValue.un.rawMagnetometer.z
-          );
+              "Raw Magnetic Field - x: %f y: %f z: %f\n",
+              (double)sensorValue.un.rawMagnetometer.x,
+              (double)sensorValue.un.rawMagnetometer.y,
+              (double)sensorValue.un.rawMagnetometer.z);
           break;
         default:
           break;
@@ -282,7 +295,8 @@ void loop()
 
       static int flush_cnt = 0;
 
-      if (++flush_cnt >= 100) {
+      if (++flush_cnt >= 100)
+      {
         flush_cnt = 0;
         f.flush();
       }
