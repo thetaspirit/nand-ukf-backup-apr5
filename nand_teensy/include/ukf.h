@@ -3,15 +3,15 @@
 #include <BasicLinearAlgebra.h>
 
 #define STATE_SPACE_DIM 4
-typedef BLA::Matrix<1, STATE_SPACE_DIM> state_vector_t;
+typedef BLA::Matrix<STATE_SPACE_DIM, 1> state_vector_t;
 typedef BLA::Matrix<STATE_SPACE_DIM, STATE_SPACE_DIM> state_cov_matrix_t;
 
 #define MEASUREMENT_SPACE_DIM 6
-typedef BLA::Matrix<1, MEASUREMENT_SPACE_DIM> measurement_vector_t;
+typedef BLA::Matrix<MEASUREMENT_SPACE_DIM, 1> measurement_vector_t;
 typedef BLA::Matrix<MEASUREMENT_SPACE_DIM, MEASUREMENT_SPACE_DIM> measurement_cov_matrix_t;
 
 #define INPUT_SPACE_DIM 1
-typedef BLA::Matrix<1, INPUT_SPACE_DIM> input_vector_t;
+typedef BLA::Matrix<INPUT_SPACE_DIM, 1> input_vector_t;
 
 struct params_t
 {
@@ -29,10 +29,6 @@ private:
 
   state_vector_t dynamcis(state_vector_t state, input_vector_t input); // uses params
   state_vector_t rk4(state_vector_t state, input_vector_t input);      // uses params
-
-  state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix);
-  state_cov_matrix_t square_root(state_cov_matrix_t matrix);
-  measurement_cov_matrix_t square_root(measurement_cov_matrix_t matrix);
 
   void generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, state_vector_t sigmas[2 * STATE_SPACE_DIM + 1], float weights[2 * STATE_SPACE_DIM + 1]);
   // uses zeroth sigma point weight
