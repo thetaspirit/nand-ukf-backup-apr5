@@ -32,8 +32,6 @@ private:
 
   void generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, state_vector_t sigmas[2 * STATE_SPACE_DIM + 1], float weights[2 * STATE_SPACE_DIM + 1]);
   // uses zeroth sigma point weight
-  void generate_sigmas(measurement_vector_t mean, measurement_cov_matrix_t covariance, measurement_vector_t sigmas[2 * STATE_SPACE_DIM + 1], float weights[2 * STATE_SPACE_DIM + 1]);
-  // uses zeroth sigma point weight
 
   measurement_vector_t state_to_measurement(state_vector_t vector);
   state_vector_t measurement_to_state(measurement_vector_t vector);
