@@ -187,4 +187,9 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
     cross_cov += ((state_sigmas[i] - curr_state_est) * ~m) * weights[i];
   }
   innovation_cov += this->sensor_noise;
+
+  BLA::Matrix<STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * BLA::Inverse(innovation_cov);
+
+  updated_state_est = curr_state_est + (kalman_gain * (measurement - predicted_measurement));
+  updated_state_cov = curr_state_cov - (kalman_gain * innovation_cov * ~kalman_gain);
 }
