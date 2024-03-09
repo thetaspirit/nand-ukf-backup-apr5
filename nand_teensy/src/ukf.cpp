@@ -64,11 +64,48 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
   return Q;
 }
 
+void find_eigen(state_cov_matrix_t matrix, state_cov_matrix_t &eigenvalues, state_cov_matrix_t &eigenvectors)
+{
+  eigenvectors.Fill(0);
+  state_cov_matrix_t A = matrix;
+
+  for (int i = 0; i < 50; i++)
+  // TODO I tried #define EIGEN_MAX_ITERS 50, but it wouldn't build.  no idea why.
+  {
+    state_cov_matrix_t Q = gram_schmidt(A);
+    state_cov_matrix_t R = ~Q * A;
+
+    A = R * Q;
+    eigenvectors = eigenvectors * Q;
+  }
+
+  eigenvalues.Fill(0);
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    eigenvalues(i, i) = A(i, i);
+  }
+}
+
 /**
  * @brief Computes and returns the square root of the given state covariance matrix.
  */
 state_cov_matrix_t square_root(state_cov_matrix_t matrix)
 {
+  state_cov_matrix_t D;
+  state_cov_matrix_t eigenvectors;
+  find_eigen(matrix, D, eigenvectors);
+
+  state_cov_matrix_t Q = gram_schmidt(eigenvectors);
+
+  // D is a diagonal matrix
+  // elements along D's diagonal are eigenvalues
+  // take the square root of D
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    D(i, i) = sqrt(D(i, i));
+  }
+
+  return (Q * D) * ~Q;
 }
 
 /**
@@ -127,6 +164,7 @@ measurement_vector_t UKF::state_to_measurement(state_vector_t vector)
   measurement_vector_t m;
   m(0, 0) = vector(0, 0);
   m(1, 0) = vector(1, 0);
+  return m;
 }
 
 void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, float dt,

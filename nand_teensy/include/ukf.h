@@ -13,6 +13,8 @@ typedef BLA::Matrix<MEASUREMENT_SPACE_DIM, MEASUREMENT_SPACE_DIM> measurement_co
 #define INPUT_SPACE_DIM 1
 typedef BLA::Matrix<INPUT_SPACE_DIM, 1> input_vector_t;
 
+#define EIGEN_MAX_ITERS 50;
+
 struct params_t
 {
   float wheelbase;

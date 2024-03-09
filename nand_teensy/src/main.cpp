@@ -28,13 +28,12 @@
 #define RFM69_INT 3
 #define RFM69_RST 4
 
-#include "gps.h"
-#include "buggyradio.h"
 #include "ukf.h"
 
 #include <Arduino.h>
 #include <Wire.h> //Needed for I2C to GPS
 #include <SD.h>
+#include <CSV_Parser.h>
 
 #include <Adafruit_BNO08x.h>
 
@@ -46,95 +45,34 @@ sh2_SensorValue_t sensorValue;
 // #include "SparkFun_Ublox_Arduino_Library.h" //http://librarymanager/All#SparkFun_u-blox_GNSS
 // SFE_UBLOX_GPS myGPS;
 
-/**  @file
-
- @brief Universal Transverse Mercator transforms.
-
- Functions to convert (spherical) latitude and longitude to and
- from (Euclidean) UTM coordinates.
-
- @author Chuck Gantz- chuck.gantz@globalstar.com
- */
-
 #include <cmath>
 #include <stdio.h>
 #include <stdlib.h>
-// #include "ofMathConstants.h"
 
-//@requires power>=0;
-uint64_t positivePow(uint64_t base, uint64_t power)
-{
+char *buf;
 
-  uint64_t result = 1;
-  while (power > 0)
-  {
-    result *= base;
-    power -= 1;
-  }
-  return result;
-}
-
-void setReports(void)
-{
-  Serial.println("Setting desired reports");
-  if (!bno08x.enableReport(SH2_ACCELEROMETER))
-  {
-    Serial.println("Could not enable accelerometer");
-  }
-  if (!bno08x.enableReport(SH2_GYROSCOPE_CALIBRATED))
-  {
-    Serial.println("Could not enable gyroscope");
-  }
-  if (!bno08x.enableReport(SH2_MAGNETIC_FIELD_CALIBRATED))
-  {
-    Serial.println("Could not enable magnetic field calibrated");
-  }
-  if (!bno08x.enableReport(SH2_LINEAR_ACCELERATION))
-  {
-    Serial.println("Could not enable linear acceleration");
-  }
-  if (!bno08x.enableReport(SH2_GRAVITY))
-  {
-    Serial.println("Could not enable gravity vector");
-  }
-  if (!bno08x.enableReport(SH2_ROTATION_VECTOR))
-  {
-    Serial.println("Could not enable rotation vector");
-  }
-  if (!bno08x.enableReport(SH2_GEOMAGNETIC_ROTATION_VECTOR))
-  {
-    Serial.println("Could not enable geomagnetic rotation vector");
-  }
-  if (!bno08x.enableReport(SH2_GAME_ROTATION_VECTOR))
-  {
-    Serial.println("Could not enable game rotation vector");
-  }
-  if (!bno08x.enableReport(SH2_RAW_ACCELEROMETER))
-  {
-    Serial.println("Could not enable raw accelerometer");
-  }
-  if (!bno08x.enableReport(SH2_RAW_GYROSCOPE))
-  {
-    Serial.println("Could not enable raw gyroscope");
-  }
-  if (!bno08x.enableReport(SH2_RAW_MAGNETOMETER))
-  {
-    Serial.println("Could not enable raw magnetometer");
-  }
-}
+float *timestamp;
+float *pos_x;
+float *pos_y;
+float *input;
+int n;
+bool run = true;
 
 void setup()
 {
-  Serial.begin(115200);
-  Serial.println("SparkFun Ublox Example");
+  Serial.begin(9600);
+  Serial.println("Kalman Filter Testing");
 
-  Wire.begin();
+  /*
+  uint32_t sp;
+  asm("mov %0, sp" : "=r"(sp));
+  Serial.printf("Initial stack pointer is %x\n", sp);
 
-  if (!bno08x.begin_I2C())
+  if (CrashReport)
   {
-    while (1)
-      Serial.println("BNO085 not detected over I2C. Freezing");
+    Serial.print(CrashReport);
   }
+  */
 
   if (!SD.begin(BUILTIN_SDCARD))
   {
@@ -142,178 +80,100 @@ void setup()
       Serial.println("SD card not detected. Freezing");
   }
 
-  gps_init();
+  CSV_Parser measure_cp(/*format*/ "fff", /*has_header*/ true, /*delimiter*/ ',');
+  // The line below (readSDfile) wouldn't work if SD.begin wasn't called before.
+  // readSDfile can be used as conditional, it returns 'false' if the file does not exist.
+  if (measure_cp.readSDfile("/measure.csv"))
+  {
+    timestamp = (float *)measure_cp["timestamp"];
+    pos_x = (float *)measure_cp["pos_x"];
+    pos_y = (float *)measure_cp["pos_y"];
 
-  radio_init(RFM69_CS, RFM69_INT, RFM69_RST);
+    if (!timestamp)
+    {
+      Serial.println("ERROR: timestamp column not found.");
+      Serial.println(timestamp[0]);
+    }
+    if (!pos_x)
+    {
+      Serial.println("ERROR: pos_x column not found.");
+      Serial.println(pos_x[0]);
+    }
+    if (!pos_y)
+    {
+      Serial.println("ERROR: pos_y column not found.");
+      Serial.println(pos_y[0]);
+    }
+  }
+  else
+  {
+    Serial.println("ERROR: File called '/measure.csv' does not exist...");
+  }
 
-  setReports();
+  CSV_Parser input_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
+  if (input_cp.readSDfile("/input.csv"))
+  {
+    input = (float *)input_cp["input"];
+
+    if (!input)
+    {
+      Serial.println("ERROR: input column not found.");
+      Serial.println(input[0]);
+    }
+  }
+  else
+  {
+    Serial.println("ERROR: File called '/input.csv' does not exist...");
+  }
+  n = input_cp.getRowsCount();
 }
-
-bool led_state = false;
-
-uint64_t last_gps_time = 0;
-uint64_t last_local_time = millis();
 
 void loop()
 {
-  int fileNum = 0;
-  char fileName[100];
-  while (true)
+  if (!run)
   {
-    snprintf(fileName, 100, "log%d.txt", fileNum);
-
-    if (!SD.exists(fileName))
-    {
-      break;
-    }
-
-    ++fileNum;
-  }
-  File f = SD.open(fileName, FILE_WRITE);
-
-  if (!f)
-  {
-    while (1)
-      Serial.println("File not created. Freezing");
+    // Serial.println("FILTER DONE");
+    return;
   }
 
-  f.printf("------- BEGIN NEW LOG --------\n");
+  /**************** Kalman Filtering! ****************/
+  // file setup
+  File filter_out = SD.open("filter.csv", FILE_WRITE);
+  filter_out.println("timestamp,pos_x,pos_y,heading");
+  File cov_out = SD.open("covariance.csv", FILE_WRITE);
+  cov_out.println("timestamp,c1,c2,c3,c4,c5,c6,c7,c8,c9");
 
-  unsigned long last_imu_update = millis();
+  // value setup
+  double dt = 0.01;
+  state_vector_t curr_state_est = {0, 0, 0};
+  state_cov_matrix_t curr_state_cov = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+  state_cov_matrix_t process_nosie = {0.0001, 0, 0, 0, 0.0001, 0, 0, 0, 0.000001};
+  measurement_cov_matrix_t sensor_noise = {0.5, 0, 0, 0.5};
 
-  while (1)
+  UKF Filter = UKF((params_t){1, 4}, (1 / 3), process_nosie, sensor_noise);
+
+  // running filter!
+  for (int i = 0; i < n; i++)
   {
-    // myGPS.checkUblox(); // See if new data is available. Process bytes as they come in.
+    Serial.println("FILTERING");
+    Serial.println("PREDICT");
+    state_vector_t predicted_state_est;
+    state_cov_matrix_t predicted_state_cov;
+    Filter.predict(curr_state_est, curr_state_cov, (input_vector_t){input[i]}, dt, predicted_state_est, predicted_state_cov);
+    Serial.printf("Predicted state estimate: %f,%f,%f\n", predicted_state_est(0, 0), predicted_state_est(0, 1), predicted_state_est(0, 2));
 
-    if (auto gps_coord = gps_update())
-    {
-      radio_send_gps(gps_coord->x, gps_coord->y, gps_coord->gps_time, gps_coord->fix);
-    }
+    Serial.println("UPDATE");
+    state_vector_t updated_state_est;
+    state_cov_matrix_t updated_state_cov;
+    Filter.update(predicted_state_est, predicted_state_cov, (measurement_vector_t){pos_x[i], pos_y[i]}, updated_state_est, updated_state_cov);
 
-    if (millis() - last_imu_update > 5)
-    {
-      last_imu_update = millis();
-
-      if (bno08x.wasReset())
-      {
-        Serial.print("sensor was reset ");
-        setReports();
-      }
-
-      if (bno08x.getSensorEvent(&sensorValue))
-      {
-        Serial.println("Logging IMU event");
-
-        f.printf("t: %lu, IMU ", millis());
-        switch (sensorValue.sensorId)
-        {
-
-        case SH2_ACCELEROMETER:
-          f.printf(
-              "Accelerometer - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.accelerometer.x,
-              (double)sensorValue.un.accelerometer.y,
-              (double)sensorValue.un.accelerometer.z);
-          break;
-        case SH2_GYROSCOPE_CALIBRATED:
-          f.printf(
-              "Gyro - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.gyroscope.x,
-              (double)sensorValue.un.gyroscope.y,
-              (double)sensorValue.un.gyroscope.z);
-          break;
-        case SH2_MAGNETIC_FIELD_CALIBRATED:
-          f.printf(
-              "Magnetic Field - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.magneticField.x,
-              (double)sensorValue.un.magneticField.y,
-              (double)sensorValue.un.magneticField.z);
-          break;
-        case SH2_LINEAR_ACCELERATION:
-          f.printf(
-              "Linear Acceleration - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.linearAcceleration.x,
-              (double)sensorValue.un.linearAcceleration.y,
-              (double)sensorValue.un.linearAcceleration.z);
-          break;
-        case SH2_GRAVITY:
-          f.printf(
-              "Gravity - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.gravity.x,
-              (double)sensorValue.un.gravity.y,
-              (double)sensorValue.un.gravity.z);
-          break;
-        case SH2_ROTATION_VECTOR:
-          f.printf(
-              "Rotation Vector - r: %f i: %f j: %f k: %f\n",
-              (double)sensorValue.un.rotationVector.real,
-              (double)sensorValue.un.rotationVector.i,
-              (double)sensorValue.un.rotationVector.j,
-              (double)sensorValue.un.rotationVector.k);
-          break;
-        case SH2_GEOMAGNETIC_ROTATION_VECTOR:
-          f.printf(
-              "Geo-Magnetic Rotation Vector - r: %f i: %f j: %f k: %f\n",
-              (double)sensorValue.un.geoMagRotationVector.real,
-              (double)sensorValue.un.geoMagRotationVector.i,
-              (double)sensorValue.un.geoMagRotationVector.j,
-              (double)sensorValue.un.geoMagRotationVector.k);
-          break;
-        case SH2_GAME_ROTATION_VECTOR:
-          f.printf(
-              "Game Rotation Vector - r: %f i: %f j: %f k: %f\n",
-              (double)sensorValue.un.gameRotationVector.real,
-              (double)sensorValue.un.gameRotationVector.i,
-              (double)sensorValue.un.gameRotationVector.j,
-              (double)sensorValue.un.gameRotationVector.k);
-          break;
-        case SH2_RAW_ACCELEROMETER:
-          f.printf(
-              "Raw Accelerometer - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.rawAccelerometer.x,
-              (double)sensorValue.un.rawAccelerometer.y,
-              (double)sensorValue.un.rawAccelerometer.z);
-          break;
-        case SH2_RAW_GYROSCOPE:
-          f.printf(
-              "Raw Gyro - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.rawGyroscope.x,
-              (double)sensorValue.un.rawGyroscope.y,
-              (double)sensorValue.un.rawGyroscope.z);
-          break;
-        case SH2_RAW_MAGNETOMETER:
-          f.printf(
-              "Raw Magnetic Field - x: %f y: %f z: %f\n",
-              (double)sensorValue.un.rawMagnetometer.x,
-              (double)sensorValue.un.rawMagnetometer.y,
-              (double)sensorValue.un.rawMagnetometer.z);
-          break;
-        default:
-          break;
-        }
-      }
-
-      static int flush_cnt = 0;
-
-      if (++flush_cnt >= 100)
-      {
-        flush_cnt = 0;
-        f.flush();
-      }
-    }
+    filter_out.printf("%f,%f,%f,%f\n", timestamp[i], updated_state_est(0, 0), updated_state_est(0, 1), updated_state_est(0, 2));
+    cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", timestamp[i], updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
+                   updated_state_cov(1, 0), updated_state_cov(1, 1), updated_state_cov(1, 2),
+                   updated_state_cov(2, 0), updated_state_cov(2, 1), updated_state_cov(2, 2));
   }
+
+  filter_out.close();
+  cov_out.close();
+  run = false;
 }
-
-// This function gets called from the SparkFun Ublox Arduino Library
-// As each NMEA character comes in you can specify what to do with it
-// Useful for passing to other libraries like tinyGPS, MicroNMEA, or even
-// a buffer, radio, etc.
-
-/*
-void SFE_UBLOX_GPS::processNMEA(char incoming)
-{
-  // Take the incoming char from the Ublox I2C port and pass it on to the MicroNMEA lib
-  // for sentence cracking
-  nmea.process(incoming);
-}
-*/
