@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BasicLinearAlgebra.h>
+#include <ArduinoEigenDense.h>
 
 #define STATE_SPACE_DIM 3
 typedef BLA::Matrix<STATE_SPACE_DIM, 1> state_vector_t;
@@ -46,3 +47,7 @@ public:
   void update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, measurement_vector_t measurement,
               state_vector_t &updated_state_est, state_cov_matrix_t &updated_state_cov);
 };
+
+state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix);
+void find_eigen(state_cov_matrix_t matrix, state_cov_matrix_t &eigenvalues, state_cov_matrix_t &eigenvectors);
+state_cov_matrix_t square_root(state_cov_matrix_t matrix);

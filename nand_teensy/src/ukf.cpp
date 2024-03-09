@@ -66,9 +66,34 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
 
 void find_eigen(state_cov_matrix_t matrix, state_cov_matrix_t &eigenvalues, state_cov_matrix_t &eigenvectors)
 {
+  eigenvalues.Fill(0);
   eigenvectors.Fill(0);
-  state_cov_matrix_t A = matrix;
 
+  Eigen::Matrix<float, STATE_SPACE_DIM, STATE_SPACE_DIM> A(STATE_SPACE_DIM, STATE_SPACE_DIM);
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    for (int j = 0; j < STATE_SPACE_DIM; j++)
+    {
+      A(i, j) = matrix(i, j);
+    }
+  }
+
+  Eigen::EigenSolver<Eigen::Matrix<float, STATE_SPACE_DIM, STATE_SPACE_DIM>> solver(A);
+  Eigen::Matrix3cf vectors = solver.eigenvectors();
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    for (int j = 0; j < STATE_SPACE_DIM; j++)
+    {
+      eigenvectors(i, j) = vectors(i, j).real();
+    }
+  }
+  Eigen::Vector3cf values = solver.eigenvalues();
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    eigenvalues(i, i) = values(i).real();
+  }
+
+  /*
   for (int i = 0; i < 50; i++)
   // TODO I tried #define EIGEN_MAX_ITERS 50, but it wouldn't build.  no idea why.
   {
@@ -84,6 +109,7 @@ void find_eigen(state_cov_matrix_t matrix, state_cov_matrix_t &eigenvalues, stat
   {
     eigenvalues(i, i) = A(i, i);
   }
+  */
 }
 
 /**
@@ -176,7 +202,9 @@ void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_c
 
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
+    Serial.printf("State sigma %d: %f, %f, %f  ", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
     state_sigmas[i] = rk4(state_sigmas[i], input, dt);
+    Serial.printf("After rk4: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
   }
 
   predicted_state_est.Fill(0);
@@ -205,6 +233,8 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     measurement_sigmas[i] = state_to_measurement(state_sigmas[i]);
+    Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
+    Serial.printf("Measurement sigma %d: %f, %f\n", i, measurement_sigmas[i](0, 0), measurement_sigmas[i](1, 0));
   }
 
   measurement_vector_t predicted_measurement;
@@ -228,6 +258,9 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
 
   BLA::Matrix<STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * BLA::Inverse(innovation_cov);
 
+  // Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
+  // Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
+  // Serial.printf("Kalman gain:\n%f,%f\n%f,%f\n%f,%f\n", kalman_gain(0, 0), kalman_gain(0, 1), kalman_gain(1, 0), kalman_gain(1, 1), kalman_gain(2, 0), kalman_gain(2, 1));
   updated_state_est = curr_state_est + (kalman_gain * (measurement - predicted_measurement));
   updated_state_cov = curr_state_cov - (kalman_gain * innovation_cov * ~kalman_gain);
 }

@@ -132,7 +132,6 @@ void loop()
 {
   if (!run)
   {
-    // Serial.println("FILTER DONE");
     return;
   }
 
@@ -146,26 +145,34 @@ void loop()
   // value setup
   double dt = 0.01;
   state_vector_t curr_state_est = {0, 0, 0};
-  state_cov_matrix_t curr_state_cov = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-  state_cov_matrix_t process_nosie = {0.0001, 0, 0, 0, 0.0001, 0, 0, 0, 0.000001};
-  measurement_cov_matrix_t sensor_noise = {0.5, 0, 0, 0.5};
+  state_cov_matrix_t curr_state_cov = {1, 0, 0,
+                                       0, 1, 0,
+                                       0, 0, 1};
+  state_cov_matrix_t process_nosie = {0.0001, 0, 0,
+                                      0, 0.0001, 0,
+                                      0, 0, 0.000001};
+  measurement_cov_matrix_t sensor_noise = {0.5, 0,
+                                           0, 0.5};
+
+  state_cov_matrix_t A = square_root(curr_state_cov);
 
   UKF Filter = UKF((params_t){1, 4}, (1 / 3), process_nosie, sensor_noise);
 
   // running filter!
   for (int i = 0; i < n; i++)
   {
-    Serial.println("FILTERING");
+    Serial.printf("\nFILTERING %d\n", i);
     Serial.println("PREDICT");
     state_vector_t predicted_state_est;
     state_cov_matrix_t predicted_state_cov;
     Filter.predict(curr_state_est, curr_state_cov, (input_vector_t){input[i]}, dt, predicted_state_est, predicted_state_cov);
-    Serial.printf("Predicted state estimate: %f,%f,%f\n", predicted_state_est(0, 0), predicted_state_est(0, 1), predicted_state_est(0, 2));
+    // Serial.printf("Predicted state estimate: %f,%f,%f\n", predicted_state_est(0, 0), predicted_state_est(0, 1), predicted_state_est(0, 2));
 
     Serial.println("UPDATE");
     state_vector_t updated_state_est;
     state_cov_matrix_t updated_state_cov;
     Filter.update(predicted_state_est, predicted_state_cov, (measurement_vector_t){pos_x[i], pos_y[i]}, updated_state_est, updated_state_cov);
+    // Serial.printf("Updated state estimate: %f,%f,%f\n", updated_state_est(0, 0), updated_state_est(0, 1), updated_state_est(0, 2));
 
     filter_out.printf("%f,%f,%f,%f\n", timestamp[i], updated_state_est(0, 0), updated_state_est(0, 1), updated_state_est(0, 2));
     cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", timestamp[i], updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
@@ -176,4 +183,5 @@ void loop()
   filter_out.close();
   cov_out.close();
   run = false;
+  Serial.println("FILTER DONE");
 }
