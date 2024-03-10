@@ -43,11 +43,11 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
     state_vector_t x = get_col(matrix, i);
 
     state_vector_t projection; // projection of x onto the span of the previous i-1 columns
-    projection.Fill(0);
+    projection.fill(0);
     for (int j = 0; j < i - 1; j++)
     {
       state_vector_t q = get_col(Q, j);
-      BLA::Matrix<1, 1> s = ~q * x;
+      float s = q.transpose() * x;
       projection += q * s;
     }
 
@@ -64,63 +64,28 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
   return Q;
 }
 
-void find_eigen(state_cov_matrix_t matrix, state_cov_matrix_t &eigenvalues, state_cov_matrix_t &eigenvectors)
-{
-  eigenvalues.Fill(0);
-  eigenvectors.Fill(0);
-
-  Eigen::Matrix<float, STATE_SPACE_DIM, STATE_SPACE_DIM> A(STATE_SPACE_DIM, STATE_SPACE_DIM);
-  for (int i = 0; i < STATE_SPACE_DIM; i++)
-  {
-    for (int j = 0; j < STATE_SPACE_DIM; j++)
-    {
-      A(i, j) = matrix(i, j);
-    }
-  }
-
-  Eigen::EigenSolver<Eigen::Matrix<float, STATE_SPACE_DIM, STATE_SPACE_DIM>> solver(A);
-  Eigen::Matrix3cf vectors = solver.eigenvectors();
-  for (int i = 0; i < STATE_SPACE_DIM; i++)
-  {
-    for (int j = 0; j < STATE_SPACE_DIM; j++)
-    {
-      eigenvectors(i, j) = vectors(i, j).real();
-    }
-  }
-  Eigen::Vector3cf values = solver.eigenvalues();
-  for (int i = 0; i < STATE_SPACE_DIM; i++)
-  {
-    eigenvalues(i, i) = values(i).real();
-  }
-
-  /*
-  for (int i = 0; i < 50; i++)
-  // TODO I tried #define EIGEN_MAX_ITERS 50, but it wouldn't build.  no idea why.
-  {
-    state_cov_matrix_t Q = gram_schmidt(A);
-    state_cov_matrix_t R = ~Q * A;
-
-    A = R * Q;
-    eigenvectors = eigenvectors * Q;
-  }
-
-  eigenvalues.Fill(0);
-  for (int i = 0; i < STATE_SPACE_DIM; i++)
-  {
-    eigenvalues(i, i) = A(i, i);
-  }
-  */
-}
-
 /**
  * @brief Computes and returns the square root of the given state covariance matrix.
  */
 state_cov_matrix_t square_root(state_cov_matrix_t matrix)
 {
-  state_cov_matrix_t D;
-  state_cov_matrix_t eigenvectors;
-  find_eigen(matrix, D, eigenvectors);
+  Eigen::EigenSolver<state_cov_matrix_t> solver(matrix);
 
+  state_cov_matrix_t D;
+  D.fill(0);
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    D(i, i) = solver.eigenvalues()[i].real();
+  }
+
+  state_cov_matrix_t eigenvectors;
+  for (int i = 0; i < STATE_SPACE_DIM; i++)
+  {
+    for (int j = 0; i < STATE_SPACE_DIM; i++)
+    {
+      eigenvectors(i, j) = solver.eigenvectors()(i, j).real();
+    }
+  }
   state_cov_matrix_t Q = gram_schmidt(eigenvectors);
 
   // D is a diagonal matrix
@@ -131,7 +96,7 @@ state_cov_matrix_t square_root(state_cov_matrix_t matrix)
     D(i, i) = sqrt(D(i, i));
   }
 
-  return (Q * D) * ~Q;
+  return (Q * D) * Q.transpose();
 }
 
 /**
@@ -202,13 +167,12 @@ void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_c
 
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
-    Serial.printf("State sigma %d: %f, %f, %f  ", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
     state_sigmas[i] = rk4(state_sigmas[i], input, dt);
-    Serial.printf("After rk4: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
+    Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
   }
 
-  predicted_state_est.Fill(0);
-  predicted_state_cov.Fill(0);
+  predicted_state_est.fill(0);
+  predicted_state_cov.fill(0);
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     predicted_state_est += state_sigmas[i] * state_weights[i];
@@ -217,7 +181,7 @@ void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_c
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     state_vector_t m = state_sigmas[i] - predicted_state_est;
-    predicted_state_cov += ((m * ~m) * state_weights[i]);
+    predicted_state_cov += ((m * m.transpose()) * state_weights[i]);
   }
   predicted_state_cov += this->process_noise;
 }
@@ -238,29 +202,29 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
   }
 
   measurement_vector_t predicted_measurement;
-  predicted_measurement.Fill(0);
+  predicted_measurement.fill(0);
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     predicted_measurement += measurement_sigmas[i] * weights[i];
   }
 
   measurement_cov_matrix_t innovation_cov;
-  BLA::Matrix<STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> cross_cov;
-  innovation_cov.Fill(0);
-  cross_cov.Fill(0);
+  Eigen::Matrix<float, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> cross_cov;
+  innovation_cov.fill(0);
+  cross_cov.fill(0);
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     measurement_vector_t m = measurement_sigmas[i] - predicted_measurement;
-    innovation_cov += (m * ~m) * weights[i];
-    cross_cov += ((state_sigmas[i] - curr_state_est) * ~m) * weights[i];
+    innovation_cov += (m * m.transpose()) * weights[i];
+    cross_cov += ((state_sigmas[i] - curr_state_est) * m.transpose()) * weights[i];
   }
   innovation_cov += this->sensor_noise;
 
-  BLA::Matrix<STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * BLA::Inverse(innovation_cov);
+  Eigen::Matrix<float, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * innovation_cov.inverse();
 
-  // Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
-  // Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
-  // Serial.printf("Kalman gain:\n%f,%f\n%f,%f\n%f,%f\n", kalman_gain(0, 0), kalman_gain(0, 1), kalman_gain(1, 0), kalman_gain(1, 1), kalman_gain(2, 0), kalman_gain(2, 1));
+  Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
+  Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
+  Serial.printf("Kalman gain:\n%f,%f\n%f,%f\n%f,%f\n", kalman_gain(0, 0), kalman_gain(0, 1), kalman_gain(1, 0), kalman_gain(1, 1), kalman_gain(2, 0), kalman_gain(2, 1));
   updated_state_est = curr_state_est + (kalman_gain * (measurement - predicted_measurement));
-  updated_state_cov = curr_state_cov - (kalman_gain * innovation_cov * ~kalman_gain);
+  updated_state_cov = curr_state_cov - (kalman_gain * (innovation_cov * kalman_gain.transpose()));
 }

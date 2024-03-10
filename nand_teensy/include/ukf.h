@@ -1,18 +1,17 @@
 #pragma once
 
-#include <BasicLinearAlgebra.h>
 #include <ArduinoEigenDense.h>
 
 #define STATE_SPACE_DIM 3
-typedef BLA::Matrix<STATE_SPACE_DIM, 1> state_vector_t;
-typedef BLA::Matrix<STATE_SPACE_DIM, STATE_SPACE_DIM> state_cov_matrix_t;
+typedef Eigen::Matrix<float, STATE_SPACE_DIM, 1> state_vector_t;
+typedef Eigen::Matrix<float, STATE_SPACE_DIM, STATE_SPACE_DIM> state_cov_matrix_t;
 
 #define MEASUREMENT_SPACE_DIM 2
-typedef BLA::Matrix<MEASUREMENT_SPACE_DIM, 1> measurement_vector_t;
-typedef BLA::Matrix<MEASUREMENT_SPACE_DIM, MEASUREMENT_SPACE_DIM> measurement_cov_matrix_t;
+typedef Eigen::Matrix<float, MEASUREMENT_SPACE_DIM, 1> measurement_vector_t;
+typedef Eigen::Matrix<float, MEASUREMENT_SPACE_DIM, MEASUREMENT_SPACE_DIM> measurement_cov_matrix_t;
 
 #define INPUT_SPACE_DIM 1
-typedef BLA::Matrix<INPUT_SPACE_DIM, 1> input_vector_t;
+typedef Eigen::Matrix<float, INPUT_SPACE_DIM, 1> input_vector_t;
 
 #define EIGEN_MAX_ITERS 50;
 
@@ -48,6 +47,4 @@ public:
               state_vector_t &updated_state_est, state_cov_matrix_t &updated_state_cov);
 };
 
-state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix);
-void find_eigen(state_cov_matrix_t matrix, state_cov_matrix_t &eigenvalues, state_cov_matrix_t &eigenvectors);
 state_cov_matrix_t square_root(state_cov_matrix_t matrix);

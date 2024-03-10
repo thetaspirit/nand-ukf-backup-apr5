@@ -144,17 +144,15 @@ void loop()
 
   // value setup
   double dt = 0.01;
-  state_vector_t curr_state_est = {0, 0, 0};
-  state_cov_matrix_t curr_state_cov = {1, 0, 0,
-                                       0, 1, 0,
-                                       0, 0, 1};
-  state_cov_matrix_t process_nosie = {0.0001, 0, 0,
-                                      0, 0.0001, 0,
-                                      0, 0, 0.000001};
-  measurement_cov_matrix_t sensor_noise = {0.5, 0,
-                                           0, 0.5};
-
-  state_cov_matrix_t A = square_root(curr_state_cov);
+  state_vector_t curr_state_est{{0, 0, 0}};
+  state_cov_matrix_t curr_state_cov{{1, 0, 0},
+                                    {0, 1, 0},
+                                    {0, 0, 1}};
+  state_cov_matrix_t process_nosie{{0.0001, 0, 0},
+                                   {0, 0.0001, 0},
+                                   {0, 0, 0.000001}};
+  measurement_cov_matrix_t sensor_noise{{0.5, 0},
+                                        {0, 0.5}};
 
   UKF Filter = UKF((params_t){1, 4}, (1 / 3), process_nosie, sensor_noise);
 
@@ -174,7 +172,7 @@ void loop()
     Filter.update(predicted_state_est, predicted_state_cov, (measurement_vector_t){pos_x[i], pos_y[i]}, updated_state_est, updated_state_cov);
     // Serial.printf("Updated state estimate: %f,%f,%f\n", updated_state_est(0, 0), updated_state_est(0, 1), updated_state_est(0, 2));
 
-    filter_out.printf("%f,%f,%f,%f\n", timestamp[i], updated_state_est(0, 0), updated_state_est(0, 1), updated_state_est(0, 2));
+    filter_out.printf("%f,%f,%f,%f\n", timestamp[i], updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
     cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", timestamp[i], updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
                    updated_state_cov(1, 0), updated_state_cov(1, 1), updated_state_cov(1, 2),
                    updated_state_cov(2, 0), updated_state_cov(2, 1), updated_state_cov(2, 2));
