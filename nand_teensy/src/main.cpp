@@ -67,12 +67,12 @@ void setup()
   uint32_t sp;
   asm("mov %0, sp" : "=r"(sp));
   Serial.printf("Initial stack pointer is %x\n", sp);
+  */
 
   if (CrashReport)
   {
     Serial.print(CrashReport);
   }
-  */
 
   if (!SD.begin(BUILTIN_SDCARD))
   {
@@ -175,6 +175,9 @@ void loop()
     cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", timestamp[i], updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
                    updated_state_cov(1, 0), updated_state_cov(1, 1), updated_state_cov(1, 2),
                    updated_state_cov(2, 0), updated_state_cov(2, 1), updated_state_cov(2, 2));
+
+    curr_state_est = updated_state_est;
+    curr_state_cov = updated_state_cov;
   }
 
   filter_out.close();

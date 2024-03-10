@@ -47,4 +47,5 @@ public:
               state_vector_t &updated_state_est, state_cov_matrix_t &updated_state_cov);
 };
 
+state_vector_t get_col(state_cov_matrix_t A, int i);
 state_cov_matrix_t square_root(state_cov_matrix_t matrix);

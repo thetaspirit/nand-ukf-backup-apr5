@@ -25,7 +25,7 @@ float magnitude(state_vector_t vector)
   float sum = 0;
   for (int i = 0; i < STATE_SPACE_DIM; i++)
   {
-    sum += vector(i, 0);
+    sum += vector(i, 0) * vector(i, 0);
   }
   return sqrt(sum);
 }
@@ -41,7 +41,6 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
   for (int i = 0; i < STATE_SPACE_DIM; i++)
   {
     state_vector_t x = get_col(matrix, i);
-
     state_vector_t projection; // projection of x onto the span of the previous i-1 columns
     projection.fill(0);
     for (int j = 0; j < i - 1; j++)
@@ -52,6 +51,7 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
     }
 
     x -= projection;
+
     state_vector_t q = x / magnitude(x);
 
     // writing q into the respective column of Q
@@ -81,7 +81,7 @@ state_cov_matrix_t square_root(state_cov_matrix_t matrix)
   state_cov_matrix_t eigenvectors;
   for (int i = 0; i < STATE_SPACE_DIM; i++)
   {
-    for (int j = 0; i < STATE_SPACE_DIM; i++)
+    for (int j = 0; j < STATE_SPACE_DIM; j++)
     {
       eigenvectors(i, j) = solver.eigenvectors()(i, j).real();
     }
@@ -138,7 +138,7 @@ state_vector_t UKF::dynamcis(state_vector_t state, input_vector_t input)
   state_vector_t x;
   x(0, 0) = this->params.velocity * cos(state(2, 0));
   x(1, 0) = this->params.velocity * sin(state(2, 0));
-  x(2, 0) = this->params.velocity * cos(input(0, 0)) / this->params.wheelbase;
+  x(2, 0) = this->params.velocity * tan(input(0, 0)) / this->params.wheelbase;
   return x;
 }
 
@@ -173,7 +173,7 @@ void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_c
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     state_sigmas[i] = rk4(state_sigmas[i], input, dt);
-    Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
+    // Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
   }
 
   predicted_state_est.fill(0);
@@ -202,8 +202,8 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
     measurement_sigmas[i] = state_to_measurement(state_sigmas[i]);
-    Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
-    Serial.printf("Measurement sigma %d: %f, %f\n", i, measurement_sigmas[i](0, 0), measurement_sigmas[i](1, 0));
+    // Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
+    // Serial.printf("Measurement sigma %d: %f, %f\n", i, measurement_sigmas[i](0, 0), measurement_sigmas[i](1, 0));
   }
 
   measurement_vector_t predicted_measurement;
