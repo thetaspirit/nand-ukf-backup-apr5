@@ -51,10 +51,10 @@ sh2_SensorValue_t sensorValue;
 
 char *buf;
 
-float *timestamp;
-float *pos_x;
-float *pos_y;
-float *input;
+double *timestamp;
+double *pos_x;
+double *pos_y;
+double *input;
 int n;
 bool run = true;
 
@@ -85,9 +85,9 @@ void setup()
   // readSDfile can be used as conditional, it returns 'false' if the file does not exist.
   if (measure_cp.readSDfile("/measure.csv"))
   {
-    timestamp = (float *)measure_cp["timestamp"];
-    pos_x = (float *)measure_cp["pos_x"];
-    pos_y = (float *)measure_cp["pos_y"];
+    timestamp = (double *)measure_cp["timestamp"];
+    pos_x = (double *)measure_cp["pos_x"];
+    pos_y = (double *)measure_cp["pos_y"];
 
     if (!timestamp)
     {
@@ -113,7 +113,7 @@ void setup()
   CSV_Parser input_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
   if (input_cp.readSDfile("/input.csv"))
   {
-    input = (float *)input_cp["input"];
+    input = (double *)input_cp["input"];
 
     if (!input)
     {

@@ -2,7 +2,7 @@
 #include <math.h>
 #include <Arduino.h>
 
-UKF::UKF(params_t params, float zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise)
+UKF::UKF(params_t params, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise)
 {
   this->params = params;
   this->zeroth_sigma_point_weight = zeroth_sigma_point_weight;
@@ -20,9 +20,9 @@ state_vector_t get_col(state_cov_matrix_t matrix, int col)
   return c;
 }
 
-float magnitude(state_vector_t vector)
+double magnitude(state_vector_t vector)
 {
-  float sum = 0;
+  double sum = 0;
   for (int i = 0; i < STATE_SPACE_DIM; i++)
   {
     sum += vector(i, 0) * vector(i, 0);
@@ -46,7 +46,7 @@ state_cov_matrix_t gram_schmidt(state_cov_matrix_t matrix)
     for (int j = 0; j < i - 1; j++)
     {
       state_vector_t q = get_col(Q, j);
-      float s = q.transpose() * x;
+      double s = q.transpose() * x;
       projection += q * s;
     }
 
@@ -105,9 +105,9 @@ state_cov_matrix_t square_root(state_cov_matrix_t matrix)
  * @param mean Vector in state space
  * @param covariance Covariance matrix (in state space)
  * @param sigmas Pointer to a list of 2*STATE_SPACE_DIM + 1 state space vectors for this function to write to
- * @param weights Pointer to a list of 2*STATE_SPACE_DIM + 1 floats for this function to write to.
+ * @param weights Pointer to a list of 2*STATE_SPACE_DIM + 1 double for this function to write to.
  */
-void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, state_vector_t sigmas[2 * STATE_SPACE_DIM + 1], float weights[2 * STATE_SPACE_DIM + 1])
+void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, state_vector_t sigmas[2 * STATE_SPACE_DIM + 1], double weights[2 * STATE_SPACE_DIM + 1])
 {
   state_cov_matrix_t A = square_root(covariance);
 
@@ -116,7 +116,7 @@ void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, st
 
   for (int i = 0; i < STATE_SPACE_DIM; i++)
   {
-    float s = sqrt(STATE_SPACE_DIM / (1 - weights[0]));
+    double s = sqrt(STATE_SPACE_DIM / (1 - weights[0]));
     state_vector_t A_col = get_col(A, i);
     A_col = A_col * s;
 
@@ -142,14 +142,14 @@ state_vector_t UKF::dynamcis(state_vector_t state, input_vector_t input)
   return x;
 }
 
-state_vector_t UKF::rk4(state_vector_t state, input_vector_t input, float dt)
+state_vector_t UKF::rk4(state_vector_t state, input_vector_t input, double dt)
 {
   state_vector_t k1 = this->dynamcis(state, input);
   state_vector_t k2 = this->dynamcis(state + (k1 * (dt / 2)), input);
   state_vector_t k3 = this->dynamcis(state + (k2 * (dt / 2)), input);
   state_vector_t k4 = this->dynamcis(state + (k3 * dt), input);
 
-  return state + ((k1 + (k2 * (float)2) + (k3 * (float)2) + k4) * (dt / 6));
+  return state + ((k1 + (k2 * (double)2) + (k3 * (double)2) + k4) * (dt / 6));
 }
 
 /**
@@ -163,11 +163,11 @@ measurement_vector_t UKF::state_to_measurement(state_vector_t vector)
   return m;
 }
 
-void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, float dt,
+void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
                   state_vector_t &predicted_state_est, state_cov_matrix_t &predicted_state_cov)
 {
   state_vector_t state_sigmas[2 * STATE_SPACE_DIM + 1];
-  float state_weights[2 * STATE_SPACE_DIM + 1];
+  double state_weights[2 * STATE_SPACE_DIM + 1];
   this->generate_sigmas(curr_state_est, curr_state_cov, state_sigmas, state_weights);
 
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
@@ -195,7 +195,7 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
                  state_vector_t &updated_state_est, state_cov_matrix_t &updated_state_cov)
 {
   state_vector_t state_sigmas[2 * STATE_SPACE_DIM + 1];
-  float weights[2 * STATE_SPACE_DIM + 1];
+  double weights[2 * STATE_SPACE_DIM + 1];
   this->generate_sigmas(curr_state_est, curr_state_cov, state_sigmas, weights);
 
   measurement_vector_t measurement_sigmas[2 * STATE_SPACE_DIM + 1];
@@ -214,7 +214,7 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
   }
 
   measurement_cov_matrix_t innovation_cov;
-  Eigen::Matrix<float, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> cross_cov;
+  Eigen::Matrix<double, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> cross_cov;
   innovation_cov.fill(0);
   cross_cov.fill(0);
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
@@ -225,7 +225,7 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
   }
   innovation_cov += this->sensor_noise;
 
-  Eigen::Matrix<float, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * innovation_cov.inverse();
+  Eigen::Matrix<double, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * innovation_cov.inverse();
 
   Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
   Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
