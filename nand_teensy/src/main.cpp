@@ -164,13 +164,12 @@ void loop()
     state_vector_t predicted_state_est;
     state_cov_matrix_t predicted_state_cov;
     Filter.predict(curr_state_est, curr_state_cov, (input_vector_t){input[i]}, dt, predicted_state_est, predicted_state_cov);
-    // Serial.printf("Predicted state estimate: %f,%f,%f\n", predicted_state_est(0, 0), predicted_state_est(0, 1), predicted_state_est(0, 2));
 
     Serial.println("UPDATE");
     state_vector_t updated_state_est;
     state_cov_matrix_t updated_state_cov;
     Filter.update(predicted_state_est, predicted_state_cov, (measurement_vector_t){pos_x[i], pos_y[i]}, updated_state_est, updated_state_cov);
-    // Serial.printf("Updated state estimate: %f,%f,%f\n", updated_state_est(0, 0), updated_state_est(0, 1), updated_state_est(0, 2));
+    Serial.printf("Filtered state: %f,%f,%f\n", updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
 
     filter_out.printf("%f,%f,%f,%f\n", timestamp[i], updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
     cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", timestamp[i], updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),

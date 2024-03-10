@@ -123,6 +123,11 @@ void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, st
     sigmas[i + 1] = mean + A_col;
     sigmas[i + 1 + STATE_SPACE_DIM] = mean - A_col;
   }
+
+  for (int i = 1; i < 2 * STATE_SPACE_DIM + 1; i++)
+  {
+    weights[i] = (1 - weights[0]) / (2 * STATE_SPACE_DIM);
+  }
 }
 
 /**
