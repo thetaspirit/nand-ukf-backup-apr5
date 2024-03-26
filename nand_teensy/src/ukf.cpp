@@ -153,28 +153,13 @@ state_vector_t UKF::rk4(state_vector_t state, input_vector_t input, double dt)
 }
 
 /**
- * @brief Tranforms the given state space vector into gps measurement space.
+ * @brief Tranforms the given state space vector into measurement space.
  */
-measurement_vector_t* UKF::state_to_gps_measurement(state_vector_t state, input_vector_t input)
+measurement_vector_t UKF::state_to_measurement(state_vector_t vector)
 {
-  measurement_vector_t *m = new Eigen::Matrix<float, GPS_SPACE_DIM, 1>;
-
-  (*m)(0, 0) = state(0, 0) + this->params.la * cos(state(2, 0));
-  (*m)(1, 0) = state(1, 0) + this->params.la * sin(state(2, 0));
-  (*m)(2, 0) = state(3, 0) * cos(input(0, 0)) - (state(4, 0) - this->params.lf * state(5, 0)) * sin(input(0, 0));
-
-  return m;
-}
-
-/**
- * @brief Tranforms the given state space vector into imu measurement space.
- */
-measurement_vector_t *UKF::state_to_imu_measurement(state_vector_t state, input_vector_t input)
-{
-  measurement_vector_t *m = new Eigen::Matrix<float, IMU_SPACE_DIM, 1>;
-  (*m)(0, 0) = state(5, 0);
-  (*m)(1, 0) = state(3, 0) * cos(input(0, 0)) - (state(4, 0) - this->params.lf * state(5, 0)) * sin(input(0, 0));
-
+  measurement_vector_t m;
+  m(0, 0) = vector(0, 0);
+  m(1, 0) = vector(1, 0);
   return m;
 }
 
@@ -206,24 +191,17 @@ void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_c
   predicted_state_cov += this->process_noise;
 }
 
-void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, measurement_vector_t measurement, input_vector_t input,
-                 state_vector_t &updated_state_est, state_cov_matrix_t &updated_state_cov, enum measurement_type m_type)
+void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, measurement_vector_t measurement,
+                 state_vector_t &updated_state_est, state_cov_matrix_t &updated_state_cov)
 {
-  int measurement_dimension = (m_type == GPS) ? GPS_SPACE_DIM : IMU_SPACE_DIM;
-
   state_vector_t state_sigmas[2 * STATE_SPACE_DIM + 1];
   double weights[2 * STATE_SPACE_DIM + 1];
   this->generate_sigmas(curr_state_est, curr_state_cov, state_sigmas, weights);
 
-  measurement_vector_t *measurement_sigmas[2 * STATE_SPACE_DIM + 1];
+  measurement_vector_t measurement_sigmas[2 * STATE_SPACE_DIM + 1];
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
-    if (m_type == GPS) {
-      measurement_sigmas[i] = state_to_gps_measurement(state_sigmas[i], input);
-    }
-    else {
-      measurement_sigmas[i] = state_to_imu_measurement(state_sigmas[i], input);
-    }
+    measurement_sigmas[i] = state_to_measurement(state_sigmas[i]);
     // Serial.printf("State sigma %d: %f, %f, %f\n", i, state_sigmas[i](0, 0), state_sigmas[i](1, 0), state_sigmas[i](2, 0));
     // Serial.printf("Measurement sigma %d: %f, %f\n", i, measurement_sigmas[i](0, 0), measurement_sigmas[i](1, 0));
   }
@@ -232,22 +210,22 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
   predicted_measurement.fill(0);
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
-    predicted_measurement += *(measurement_sigmas[i]) * weights[i];
+    predicted_measurement += measurement_sigmas[i] * weights[i];
   }
 
   measurement_cov_matrix_t innovation_cov;
-  Eigen::Matrix<double, STATE_SPACE_DIM, Eigen::Dynamic> cross_cov(STATE_SPACE_DIM, measurement_dimension);
+  Eigen::Matrix<double, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> cross_cov;
   innovation_cov.fill(0);
   cross_cov.fill(0);
   for (int i = 0; i < 2 * STATE_SPACE_DIM + 1; i++)
   {
-    measurement_vector_t m = *(measurement_sigmas[i]) - predicted_measurement;
+    measurement_vector_t m = measurement_sigmas[i] - predicted_measurement;
     innovation_cov += (m * m.transpose()) * weights[i];
     cross_cov += ((state_sigmas[i] - curr_state_est) * m.transpose()) * weights[i];
   }
   innovation_cov += this->sensor_noise;
 
-  Eigen::Matrix<double, STATE_SPACE_DIM, Eigen::Dynamic> kalman_gain = cross_cov * innovation_cov.inverse();
+  Eigen::Matrix<double, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * innovation_cov.inverse();
 
   Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
   Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
