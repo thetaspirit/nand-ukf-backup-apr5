@@ -51,11 +51,19 @@ sh2_SensorValue_t sensorValue;
 
 char *buf;
 
-double *timestamp;
+double *gps_timestamp;
 double *pos_x;
 double *pos_y;
-double *input;
-int n;
+int gps_len;
+
+double *encoder_timestamp;
+double *speed;
+int encoder_len;
+
+double *steering_timestamp;
+double *steering;
+int steering_len;
+
 bool run = true;
 
 void setup()
@@ -80,19 +88,19 @@ void setup()
       Serial.println("SD card not detected. Freezing");
   }
 
-  CSV_Parser measure_cp(/*format*/ "fff", /*has_header*/ true, /*delimiter*/ ',');
+  CSV_Parser gps_cp(/*format*/ "fff", /*has_header*/ true, /*delimiter*/ ',');
   // The line below (readSDfile) wouldn't work if SD.begin wasn't called before.
   // readSDfile can be used as conditional, it returns 'false' if the file does not exist.
-  if (measure_cp.readSDfile("/measure.csv"))
+  if (gps_cp.readSDfile("/log31-gps.csv"))
   {
-    timestamp = (double *)measure_cp["timestamp"];
-    pos_x = (double *)measure_cp["pos_x"];
-    pos_y = (double *)measure_cp["pos_y"];
+    gps_timestamp = (double *)gps_cp["timestamp"];
+    pos_x = (double *)gps_cp["pos_x"];
+    pos_y = (double *)gps_cp["pos_y"];
 
-    if (!timestamp)
+    if (!gps_timestamp)
     {
       Serial.println("ERROR: timestamp column not found.");
-      Serial.println(timestamp[0]);
+      Serial.println(gps_timestamp[0]);
     }
     if (!pos_x)
     {
@@ -107,25 +115,65 @@ void setup()
   }
   else
   {
-    Serial.println("ERROR: File called '/measure.csv' does not exist...");
+    Serial.println("ERROR: File called '/log31-gps.csv' does not exist...");
   }
 
-  CSV_Parser input_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
-  if (input_cp.readSDfile("/input.csv"))
+  CSV_Parser encoder_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
+  if (encoder_cp.readSDfile("/log31-encoder.csv"))
   {
-    input = (double *)input_cp["input"];
+    encoder_timestamp = (double *)encoder_cp["timestamp"];
+    speed = (double *)encoder_cp["speed"];
 
-    if (!input)
+    if (!encoder_timestamp)
     {
-      Serial.println("ERROR: input column not found.");
-      Serial.println(input[0]);
+      Serial.println("ERROR: timestamp column not found.");
+      Serial.println(encoder_timestamp[0]);
+    }
+    if (!speed) {
+      Serial.println("ERROR: speed column not found.");
+      Serial.println(speed[0]);
     }
   }
   else
   {
-    Serial.println("ERROR: File called '/input.csv' does not exist...");
+    Serial.println("ERROR: File called '/log31-encoder.csv' does not exist...");
   }
-  n = input_cp.getRowsCount();
+
+  CSV_Parser steering_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
+  if (steering_cp.readSDfile("/log31-steering.csv"))
+  {
+    steering_timestamp = (double *)steering_cp["timestamp"];
+    steering = (double *)steering_cp["steering"];
+
+    if (!encoder_timestamp)
+    {
+      Serial.println("ERROR: timestamp column not found.");
+      Serial.println(steering_timestamp[0]);
+    }
+    if (!speed) {
+      Serial.println("ERROR: steering column not found.");
+      Serial.println(steering[0]);
+    }
+  }
+  else
+  {
+    Serial.println("ERROR: File called '/log31-encoder.csv' does not exist...");
+  }
+
+  gps_len = gps_cp.getRowsCount();
+  encoder_len = encoder_cp.getRowsCount();
+  steering_len = steering_cp.getRowsCount();
+
+  // convert timestamps from ms to s
+  for (int i = 0; i < gps_len; i++) {
+    gps_timestamp[i] = gps_timestamp[i] / 1000.0;
+  }
+  for (int i = 0; i < encoder_len; i++) {
+    encoder_timestamp[i] = encoder_timestamp[i] / 1000.0;
+  }
+  for (int i = 0; i < steering_len; i++) {
+    steering_timestamp[i] = steering_timestamp[i] / 1000.0;
+  }
 }
 
 void loop()
@@ -136,43 +184,89 @@ void loop()
   }
 
   /**************** Kalman Filtering! ****************/
-  // file setup
+  // output file setup
   File filter_out = SD.open("filter.csv", FILE_WRITE);
   filter_out.println("timestamp,pos_x,pos_y,heading");
   File cov_out = SD.open("covariance.csv", FILE_WRITE);
   cov_out.println("timestamp,c1,c2,c3,c4,c5,c6,c7,c8,c9");
 
-  // value setup
-  double dt = 0.01;
-  state_vector_t curr_state_est{{0, 0, 0}};
+  // ukf value setup
+
+  state_vector_t curr_state_est{{0, 0, 0}}; 
+  // TODO in real buggy code, set initial x and y first gps reading
+  // set heading to where it's facing in tent upon power on, probably
   state_cov_matrix_t curr_state_cov{{1, 0, 0},
                                     {0, 1, 0},
                                     {0, 0, 1}};
   state_cov_matrix_t process_nosie{{0.0001, 0, 0},
                                    {0, 0.0001, 0},
                                    {0, 0, 0.000001}};
-  measurement_cov_matrix_t sensor_noise{{0.5, 0},
-                                        {0, 0.5}};
+
+  measurement_cov_matrix_t sensor_noise{{0.01, 0},
+                                        {0, 0.01}};
 
   UKF Filter = UKF(1, (1 / 3), process_nosie, sensor_noise);
 
+  state_vector_t predicted_state_est;
+  state_cov_matrix_t predicted_state_cov;
+  state_vector_t updated_state_est;
+  state_cov_matrix_t updated_state_cov;
+
+  int gps_row = 0;
+  int encoder_row = 0;
+  int steering_row = 0;
+
+  input_vector_t current_steering = (input_vector_t){steering[0]};
+  double last_predict_timestamp = steering_timestamp[0];
   // running filter!
-  for (int i = 0; i < n; i++)
+  while (gps_row < gps_len && encoder_row < encoder_len && steering_row < steering_len)
   {
-    Serial.printf("\nFILTERING %d\n", i);
-    Serial.println("PREDICT");
-    state_vector_t predicted_state_est;
-    state_cov_matrix_t predicted_state_cov;
-    Filter.predict(curr_state_est, curr_state_cov, (input_vector_t){input[i]}, dt, predicted_state_est, predicted_state_cov);
+    if (gps_timestamp[gps_row] < encoder_timestamp[encoder_row] && gps_timestamp[gps_row] < steering_timestamp[steering_row]) {
+      // gps is the next timestamp
+      // predict using most recent steering and velocity
+      // then update
+      double dt = gps_timestamp[gps_row] - last_predict_timestamp;
 
-    Serial.println("UPDATE");
-    state_vector_t updated_state_est;
-    state_cov_matrix_t updated_state_cov;
-    Filter.update(predicted_state_est, predicted_state_cov, (measurement_vector_t){pos_x[i], pos_y[i]}, updated_state_est, updated_state_cov);
-    Serial.printf("Filtered state: %f,%f,%f\n", updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
+      Filter.predict(curr_state_est, curr_state_cov, current_steering,
+      dt, predicted_state_est, predicted_state_cov);
+      Filter.update(predicted_state_est, predicted_state_cov,
+      (measurement_vector_t){pos_x[gps_row], pos_y[gps_row]}, updated_state_est, updated_state_cov);
 
-    filter_out.printf("%f,%f,%f,%f\n", timestamp[i], updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
-    cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", timestamp[i], updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
+      last_predict_timestamp = gps_timestamp[gps_row];
+      gps_row++;
+    }
+
+    else if (encoder_timestamp[encoder_row] < steering_timestamp[steering_row]) {
+      // encoder is the next timestamp
+      // set the new speed stored by instance of UKF
+      // predict using most recent steering and new speed
+      double dt = encoder_timestamp[encoder_row] - last_predict_timestamp;
+
+      Filter.set_speed(speed[encoder_row]);
+      Filter.predict(curr_state_est, curr_state_cov, current_steering,
+      dt, predicted_state_est, predicted_state_cov);
+
+      last_predict_timestamp = encoder_timestamp[encoder_row];
+      encoder_row++;
+    }
+
+    else {
+      // steering is the next timestamp
+      // predict using this new steering
+      double dt = steering_timestamp[steering_row] - last_predict_timestamp;
+
+      Filter.predict(curr_state_est, curr_state_cov, current_steering,
+      dt, predicted_state_est, predicted_state_cov);
+
+      last_predict_timestamp = steering_timestamp[steering_row];
+      current_steering(0, 0) = steering[steering_row];
+      steering_row++;
+    }
+
+
+
+    filter_out.printf("%f,%f,%f,%f\n", last_predict_timestamp, updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
+    cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", last_predict_timestamp, updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
                    updated_state_cov(1, 0), updated_state_cov(1, 1), updated_state_cov(1, 2),
                    updated_state_cov(2, 0), updated_state_cov(2, 1), updated_state_cov(2, 2));
 

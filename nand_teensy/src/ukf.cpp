@@ -6,7 +6,7 @@ UKF::UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t 
 {
   this->wheelbase = wheelbase;
   this->zeroth_sigma_point_weight = zeroth_sigma_point_weight;
-  this->velocity = 0;
+  this->speed = 0;
   this->process_noise = process_noise;
   this->sensor_noise = sensor_noise;
 }
@@ -137,9 +137,9 @@ void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, st
 state_vector_t UKF::dynamcis(state_vector_t state, input_vector_t input)
 {
   state_vector_t x;
-  x(0, 0) = this->velocity * cos(state(2, 0));
-  x(1, 0) = this->velocity * sin(state(2, 0));
-  x(2, 0) = this->velocity * tan(input(0, 0)) / this->wheelbase;
+  x(0, 0) = this->speed * cos(state(2, 0));
+  x(1, 0) = this->speed * sin(state(2, 0));
+  x(2, 0) = this->speed * tan(input(0, 0)) / this->wheelbase;
   return x;
 }
 
@@ -164,8 +164,8 @@ measurement_vector_t UKF::state_to_measurement(state_vector_t vector)
   return m;
 }
 
-void UKF::set_velocity(double velocity) {
-  this->velocity = velocity;
+void UKF::set_speed(double speed) {
+  this->speed = speed;
 }
 
 void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
@@ -193,7 +193,7 @@ void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_c
     state_vector_t m = state_sigmas[i] - predicted_state_est;
     predicted_state_cov += ((m * m.transpose()) * state_weights[i]);
   }
-  predicted_state_cov += this->process_noise;
+  predicted_state_cov += this->process_noise * dt;
 }
 
 void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, measurement_vector_t measurement,

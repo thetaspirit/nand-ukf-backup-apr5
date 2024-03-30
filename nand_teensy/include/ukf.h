@@ -20,7 +20,7 @@ class UKF
 {
 private:
   double wheelbase;
-  double velocity;
+  double speed;
   double zeroth_sigma_point_weight;
 
   state_cov_matrix_t process_noise;
@@ -33,10 +33,11 @@ private:
 
   measurement_vector_t state_to_measurement(state_vector_t vector);
 
-  void set_velocity(double velocity);
 
 public:
   UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise);
+
+  void set_speed(double speed);
 
   void predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
                state_vector_t &predicted_state_est, state_cov_matrix_t &predicted_state_cov);
