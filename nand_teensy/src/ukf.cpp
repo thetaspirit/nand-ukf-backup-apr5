@@ -2,13 +2,13 @@
 #include <math.h>
 #include <Arduino.h>
 
-UKF::UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise)
+UKF::UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t gps_noise)
 {
   this->wheelbase = wheelbase;
   this->zeroth_sigma_point_weight = zeroth_sigma_point_weight;
   this->speed = 0;
   this->process_noise = process_noise;
-  this->sensor_noise = sensor_noise;
+  this->gps_noise = gps_noise;
 }
 
 state_vector_t get_col(state_cov_matrix_t matrix, int col)
@@ -168,6 +168,11 @@ void UKF::set_speed(double speed) {
   this->speed = speed;
 }
 
+void UKF::set_gps_noise(double accuracy) {
+  double sigma = (accuracy / (0.848867684498)) * (accuracy / (0.848867684498));
+  this->gps_noise = (measurement_cov_matrix_t){{sigma, 0}, {0, sigma}};
+}
+
 void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
                   state_vector_t &predicted_state_est, state_cov_matrix_t &predicted_state_cov)
 {
@@ -228,7 +233,7 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
     innovation_cov += (m * m.transpose()) * weights[i];
     cross_cov += ((state_sigmas[i] - curr_state_est) * m.transpose()) * weights[i];
   }
-  innovation_cov += this->sensor_noise;
+  innovation_cov += this->gps_noise;
 
   Eigen::Matrix<double, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * innovation_cov.inverse();
 

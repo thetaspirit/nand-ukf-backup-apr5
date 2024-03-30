@@ -24,7 +24,7 @@ private:
   double zeroth_sigma_point_weight;
 
   state_cov_matrix_t process_noise;
-  measurement_cov_matrix_t sensor_noise;
+  measurement_cov_matrix_t gps_noise;
 
   state_vector_t dynamcis(state_vector_t state, input_vector_t input);
   state_vector_t rk4(state_vector_t state, input_vector_t input, double dt);
@@ -35,9 +35,10 @@ private:
 
 
 public:
-  UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise);
+  UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t gps_noise);
 
   void set_speed(double speed);
+  void set_gps_noise(double accuracy);
 
   void predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
                state_vector_t &predicted_state_est, state_cov_matrix_t &predicted_state_cov);

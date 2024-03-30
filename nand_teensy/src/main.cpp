@@ -54,6 +54,7 @@ char *buf;
 double *gps_timestamp;
 double *pos_x;
 double *pos_y;
+double *gps_accuracy;
 int gps_len;
 
 double *encoder_timestamp;
@@ -65,6 +66,17 @@ double *steering;
 int steering_len;
 
 bool run = true;
+
+CSV_Parser gps_cp(/*format*/ "ffff", /*has_header*/ true, /*delimiter*/ ',');
+CSV_Parser encoder_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
+CSV_Parser steering_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
+
+void halt_and_catch_fire(const char *msg) {
+  while (1) {
+    Serial.println(msg);
+    delay(1000);
+  }
+}
 
 void setup()
 {
@@ -88,76 +100,71 @@ void setup()
       Serial.println("SD card not detected. Freezing");
   }
 
-  CSV_Parser gps_cp(/*format*/ "fff", /*has_header*/ true, /*delimiter*/ ',');
   // The line below (readSDfile) wouldn't work if SD.begin wasn't called before.
   // readSDfile can be used as conditional, it returns 'false' if the file does not exist.
-  if (gps_cp.readSDfile("/log31-gps.csv"))
+  if (gps_cp.readSDfile("/log44-gps.csv"))
   {
     gps_timestamp = (double *)gps_cp["timestamp"];
     pos_x = (double *)gps_cp["pos_x"];
     pos_y = (double *)gps_cp["pos_y"];
+    gps_accuracy = (double *)gps_cp["accuracy"];
 
     if (!gps_timestamp)
     {
-      Serial.println("ERROR: timestamp column not found.");
-      Serial.println(gps_timestamp[0]);
+      halt_and_catch_fire("ERROR: timestamp column not found.");
     }
     if (!pos_x)
     {
-      Serial.println("ERROR: pos_x column not found.");
-      Serial.println(pos_x[0]);
+      halt_and_catch_fire("ERROR: pos_x column not found.");
     }
     if (!pos_y)
     {
-      Serial.println("ERROR: pos_y column not found.");
-      Serial.println(pos_y[0]);
+      halt_and_catch_fire("ERROR: pos_y column not found.");
+    }
+    if (!gps_accuracy)
+    {
+      halt_and_catch_fire("ERROR: gps_accuracy column not found.");
     }
   }
   else
   {
-    Serial.println("ERROR: File called '/log31-gps.csv' does not exist...");
+    halt_and_catch_fire("ERROR: File called '/log44-gps.csv' does not exist...");
   }
 
-  CSV_Parser encoder_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
-  if (encoder_cp.readSDfile("/log31-encoder.csv"))
+  if (encoder_cp.readSDfile("/log44-encoder.csv"))
   {
     encoder_timestamp = (double *)encoder_cp["timestamp"];
     speed = (double *)encoder_cp["speed"];
 
     if (!encoder_timestamp)
     {
-      Serial.println("ERROR: timestamp column not found.");
-      Serial.println(encoder_timestamp[0]);
+      halt_and_catch_fire("ERROR: timestamp column not found.");
     }
     if (!speed) {
-      Serial.println("ERROR: speed column not found.");
-      Serial.println(speed[0]);
+      halt_and_catch_fire("ERROR: speed column not found.");
     }
   }
   else
   {
-    Serial.println("ERROR: File called '/log31-encoder.csv' does not exist...");
+    halt_and_catch_fire("ERROR: File called '/log44-encoder.csv' does not exist...");
   }
 
-  CSV_Parser steering_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
-  if (steering_cp.readSDfile("/log31-steering.csv"))
+  if (steering_cp.readSDfile("/log44-steering.csv"))
   {
     steering_timestamp = (double *)steering_cp["timestamp"];
     steering = (double *)steering_cp["steering"];
 
-    if (!encoder_timestamp)
+    if (!steering_timestamp)
     {
-      Serial.println("ERROR: timestamp column not found.");
-      Serial.println(steering_timestamp[0]);
+      halt_and_catch_fire("ERROR: steering timestamp column not found.");
     }
-    if (!speed) {
-      Serial.println("ERROR: steering column not found.");
-      Serial.println(steering[0]);
+    if (!steering) {
+      halt_and_catch_fire("ERROR: steering column not found.");
     }
   }
   else
   {
-    Serial.println("ERROR: File called '/log31-encoder.csv' does not exist...");
+    halt_and_catch_fire("ERROR: File called '/log44-encoder.csv' does not exist...");
   }
 
   gps_len = gps_cp.getRowsCount();
@@ -202,10 +209,10 @@ void loop()
                                    {0, 0.0001, 0},
                                    {0, 0, 0.000001}};
 
-  measurement_cov_matrix_t sensor_noise{{0.01, 0},
+  measurement_cov_matrix_t gps_noise{{0.01, 0},
                                         {0, 0.01}};
 
-  UKF Filter = UKF(1, (1 / 3), process_nosie, sensor_noise);
+  UKF Filter = UKF(1, (1 / 3), process_nosie, gps_noise);
 
   state_vector_t predicted_state_est;
   state_cov_matrix_t predicted_state_cov;
@@ -223,9 +230,12 @@ void loop()
   {
     if (gps_timestamp[gps_row] < encoder_timestamp[encoder_row] && gps_timestamp[gps_row] < steering_timestamp[steering_row]) {
       // gps is the next timestamp
+      // set the new gps noise
       // predict using most recent steering and velocity
-      // then update
+      // then update using the current gps noise
       double dt = gps_timestamp[gps_row] - last_predict_timestamp;
+
+      Filter.set_gps_noise(gps_accuracy[gps_row]);
 
       Filter.predict(curr_state_est, curr_state_cov, current_steering,
       dt, predicted_state_est, predicted_state_cov);
