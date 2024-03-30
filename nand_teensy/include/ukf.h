@@ -15,16 +15,12 @@ typedef Eigen::Matrix<double, INPUT_SPACE_DIM, 1> input_vector_t;
 
 #define EIGEN_MAX_ITERS 50;
 
-struct params_t
-{
-  double wheelbase;
-  double velocity;
-};
 
 class UKF
 {
 private:
-  params_t params;
+  double wheelbase;
+  double velocity;
   double zeroth_sigma_point_weight;
 
   state_cov_matrix_t process_noise;
@@ -37,8 +33,10 @@ private:
 
   measurement_vector_t state_to_measurement(state_vector_t vector);
 
+  void set_velocity(double velocity);
+
 public:
-  UKF(params_t params, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise);
+  UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise);
 
   void predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
                state_vector_t &predicted_state_est, state_cov_matrix_t &predicted_state_cov);

@@ -154,7 +154,7 @@ void loop()
   measurement_cov_matrix_t sensor_noise{{0.5, 0},
                                         {0, 0.5}};
 
-  UKF Filter = UKF((params_t){1, 4}, (1 / 3), process_nosie, sensor_noise);
+  UKF Filter = UKF(1, (1 / 3), process_nosie, sensor_noise);
 
   // running filter!
   for (int i = 0; i < n; i++)

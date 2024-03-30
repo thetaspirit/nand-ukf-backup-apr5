@@ -2,10 +2,11 @@
 #include <math.h>
 #include <Arduino.h>
 
-UKF::UKF(params_t params, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise)
+UKF::UKF(double wheelbase, double zeroth_sigma_point_weight, state_cov_matrix_t process_noise, measurement_cov_matrix_t sensor_noise)
 {
-  this->params = params;
+  this->wheelbase = wheelbase;
   this->zeroth_sigma_point_weight = zeroth_sigma_point_weight;
+  this->velocity = 0;
   this->process_noise = process_noise;
   this->sensor_noise = sensor_noise;
 }
@@ -136,9 +137,9 @@ void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, st
 state_vector_t UKF::dynamcis(state_vector_t state, input_vector_t input)
 {
   state_vector_t x;
-  x(0, 0) = this->params.velocity * cos(state(2, 0));
-  x(1, 0) = this->params.velocity * sin(state(2, 0));
-  x(2, 0) = this->params.velocity * tan(input(0, 0)) / this->params.wheelbase;
+  x(0, 0) = this->velocity * cos(state(2, 0));
+  x(1, 0) = this->velocity * sin(state(2, 0));
+  x(2, 0) = this->velocity * tan(input(0, 0)) / this->wheelbase;
   return x;
 }
 
@@ -161,6 +162,10 @@ measurement_vector_t UKF::state_to_measurement(state_vector_t vector)
   m(0, 0) = vector(0, 0);
   m(1, 0) = vector(1, 0);
   return m;
+}
+
+void UKF::set_velocity(double velocity) {
+  this->velocity = velocity;
 }
 
 void UKF::predict(state_vector_t curr_state_est, state_cov_matrix_t curr_state_cov, input_vector_t input, double dt,
