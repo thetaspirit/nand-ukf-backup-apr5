@@ -134,7 +134,7 @@ void UKF::generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, st
 /**
  * @brief Calculates and returns the dynamics of the system
  */
-state_vector_t UKF::dynamcis(state_vector_t state, input_vector_t input)
+state_vector_t UKF::dynamics(state_vector_t state, input_vector_t input)
 {
   state_vector_t x;
   x(0, 0) = this->speed * cos(state(2, 0));
@@ -145,10 +145,10 @@ state_vector_t UKF::dynamcis(state_vector_t state, input_vector_t input)
 
 state_vector_t UKF::rk4(state_vector_t state, input_vector_t input, double dt)
 {
-  state_vector_t k1 = this->dynamcis(state, input);
-  state_vector_t k2 = this->dynamcis(state + (k1 * (dt / 2)), input);
-  state_vector_t k3 = this->dynamcis(state + (k2 * (dt / 2)), input);
-  state_vector_t k4 = this->dynamcis(state + (k3 * dt), input);
+  state_vector_t k1 = this->dynamics(state, input);
+  state_vector_t k2 = this->dynamics(state + (k1 * (dt / 2)), input);
+  state_vector_t k3 = this->dynamics(state + (k2 * (dt / 2)), input);
+  state_vector_t k4 = this->dynamics(state + (k3 * dt), input);
 
   return state + ((k1 + (k2 * (double)2) + (k3 * (double)2) + k4) * (dt / 6));
 }

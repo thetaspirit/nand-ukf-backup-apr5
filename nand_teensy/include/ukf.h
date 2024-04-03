@@ -26,7 +26,7 @@ private:
   state_cov_matrix_t process_noise;
   measurement_cov_matrix_t gps_noise;
 
-  state_vector_t dynamcis(state_vector_t state, input_vector_t input);
+  state_vector_t dynamics(state_vector_t state, input_vector_t input);
   state_vector_t rk4(state_vector_t state, input_vector_t input, double dt);
 
   void generate_sigmas(state_vector_t mean, state_cov_matrix_t covariance, state_vector_t sigmas[2 * STATE_SPACE_DIM + 1], double weights[2 * STATE_SPACE_DIM + 1]);

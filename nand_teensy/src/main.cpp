@@ -51,6 +51,7 @@ sh2_SensorValue_t sensorValue;
 
 char *buf;
 
+/*
 double *gps_timestamp;
 double *pos_x;
 double *pos_y;
@@ -64,12 +65,144 @@ int encoder_len;
 double *steering_timestamp;
 double *steering;
 int steering_len;
+*/
 
 bool run = true;
 
-CSV_Parser gps_cp(/*format*/ "ffff", /*has_header*/ true, /*delimiter*/ ',');
-CSV_Parser encoder_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
-CSV_Parser steering_cp(/*format*/ "ff", /*has_header*/ true, /*delimiter*/ ',');
+#define LINE_BUF_SIZE 100
+
+enum Measurement {
+  Gps,
+  Encoder,
+  Steering,
+};
+
+class DataStream {
+public:
+  DataStream() :
+    next_gps_time(0xFFFFFFFF),
+    next_encoder_time(0xFFFFFFFF),
+    next_steering_time(0xFFFFFFFF),
+
+    gps_file(SD.open("log44-gps.csv")),
+    encoder_file(SD.open("log44-encoder.csv")),
+    steering_file(SD.open("log44-steering.csv"))
+  {
+    if (!gps_file || !encoder_file || !steering_file) {
+      while (1) {
+        Serial.println("Failed to open a file");
+        delay(1000);
+      }
+    }
+
+    char buf[LINE_BUF_SIZE];
+
+    memset(buf, 0, sizeof(buf));
+    gps_file.readBytesUntil('\n', buf, LINE_BUF_SIZE - 1);
+    Serial.printf("gps: %s\n", buf);
+
+    memset(buf, 0, sizeof(buf));
+    encoder_file.readBytesUntil('\n', buf, LINE_BUF_SIZE - 1);
+    Serial.printf("encoder: %s\n", buf);
+
+    memset(buf, 0, sizeof(buf));
+    steering_file.readBytesUntil('\n', buf, LINE_BUF_SIZE - 1);
+    Serial.printf("steering: %s\n", buf);
+
+    read_gps();
+    read_encoder();
+    read_steering();
+  }
+
+  double next_gps_x, next_gps_y, next_gps_acc;
+
+  double next_encoder_speed;
+
+  double next_steering_angle;
+
+  Measurement next_measurement() {
+    if (next_gps_time <= next_encoder_time && next_gps_time <= next_steering_time) {
+      return Measurement::Gps;
+    } else if (next_encoder_time <= next_gps_time && next_encoder_time <= next_steering_time) {
+      return Measurement::Encoder;
+    } else {
+      return Measurement::Steering;
+    }
+  }
+
+  void advance(Measurement m) {
+    switch (m) {
+    case Measurement::Gps:      read_gps();      break;
+    case Measurement::Encoder:  read_encoder();  break;
+    case Measurement::Steering: read_steering(); break;
+    default: break;
+    }
+  }
+  
+  bool finished() {
+    // TODO:
+    return (next_gps_time == 0xFFFFFFFF && next_encoder_time == 0xFFFFFFFF && next_steering_time == 0xFFFFFFFF);
+  }
+
+  double gps_time() {
+    return next_gps_time / 1000.0;
+  }
+
+  double encoder_time() {
+    return next_encoder_time / 1000.0;
+  }
+
+  double steering_time() {
+    return next_steering_time / 1000.0;
+  }
+
+private:
+
+  uint32_t next_gps_time, next_encoder_time, next_steering_time;
+
+  void read_gps() {
+    char buf[LINE_BUF_SIZE] = { 0 };
+    size_t num_read = gps_file.readBytesUntil('\n', buf, LINE_BUF_SIZE - 1);
+    buf[num_read] = '\0';
+
+    if (gps_file.getReadError() != 0) {
+      next_gps_time = 0xFFFFFFFF;
+      return;
+    }
+
+    assert(gps_file.getReadError() == 0);
+
+    assert(sscanf(buf, "%lu,%lf,%lf,%lf", &next_gps_time, &next_gps_x, &next_gps_y, &next_gps_acc) == 4);
+  }
+
+  void read_encoder() {
+    char buf[LINE_BUF_SIZE] = { 0 };
+    size_t num_read = encoder_file.readBytesUntil('\n', buf, LINE_BUF_SIZE - 1);
+    buf[num_read] = '\0';
+
+    if (encoder_file.getReadError() != 0) {
+      next_encoder_time = 0xFFFFFFFF;
+    }
+
+    assert(sscanf(buf, "%lu,%lf", &next_encoder_time, &next_encoder_speed) == 2);
+  }
+
+  void read_steering() {
+    char buf[LINE_BUF_SIZE] = { 0 };
+    size_t num_read = steering_file.readBytesUntil('\n', buf, LINE_BUF_SIZE - 1);
+    buf[num_read] = '\0';
+
+    if (steering_file.getReadError() != 0) {
+      next_steering_time = 0xFFFFFFFF;
+    }
+
+    assert(sscanf(buf, "%lu,%lf", &next_steering_time, &next_steering_angle) == 2);
+  }
+
+  File gps_file;
+  File encoder_file;
+  File steering_file;
+};
 
 void halt_and_catch_fire(const char *msg) {
   while (1) {
@@ -78,10 +211,14 @@ void halt_and_catch_fire(const char *msg) {
   }
 }
 
+void run_kalman(DataStream &s);
+
 void setup()
 {
   Serial.begin(9600);
   Serial.println("Kalman Filter Testing");
+
+  delay(1000);
 
   /*
   uint32_t sp;
@@ -100,74 +237,11 @@ void setup()
       Serial.println("SD card not detected. Freezing");
   }
 
-  // The line below (readSDfile) wouldn't work if SD.begin wasn't called before.
-  // readSDfile can be used as conditional, it returns 'false' if the file does not exist.
-  if (gps_cp.readSDfile("/log44-gps.csv"))
-  {
-    gps_timestamp = (double *)gps_cp["timestamp"];
-    pos_x = (double *)gps_cp["pos_x"];
-    pos_y = (double *)gps_cp["pos_y"];
-    gps_accuracy = (double *)gps_cp["accuracy"];
+  DataStream s {};
 
-    if (!gps_timestamp)
-    {
-      halt_and_catch_fire("ERROR: timestamp column not found.");
-    }
-    if (!pos_x)
-    {
-      halt_and_catch_fire("ERROR: pos_x column not found.");
-    }
-    if (!pos_y)
-    {
-      halt_and_catch_fire("ERROR: pos_y column not found.");
-    }
-    if (!gps_accuracy)
-    {
-      halt_and_catch_fire("ERROR: gps_accuracy column not found.");
-    }
-  }
-  else
-  {
-    halt_and_catch_fire("ERROR: File called '/log44-gps.csv' does not exist...");
-  }
+  run_kalman(s);
 
-  if (encoder_cp.readSDfile("/log44-encoder.csv"))
-  {
-    encoder_timestamp = (double *)encoder_cp["timestamp"];
-    speed = (double *)encoder_cp["speed"];
-
-    if (!encoder_timestamp)
-    {
-      halt_and_catch_fire("ERROR: timestamp column not found.");
-    }
-    if (!speed) {
-      halt_and_catch_fire("ERROR: speed column not found.");
-    }
-  }
-  else
-  {
-    halt_and_catch_fire("ERROR: File called '/log44-encoder.csv' does not exist...");
-  }
-
-  if (steering_cp.readSDfile("/log44-steering.csv"))
-  {
-    steering_timestamp = (double *)steering_cp["timestamp"];
-    steering = (double *)steering_cp["steering"];
-
-    if (!steering_timestamp)
-    {
-      halt_and_catch_fire("ERROR: steering timestamp column not found.");
-    }
-    if (!steering) {
-      halt_and_catch_fire("ERROR: steering column not found.");
-    }
-  }
-  else
-  {
-    halt_and_catch_fire("ERROR: File called '/log44-encoder.csv' does not exist...");
-  }
-
-  gps_len = gps_cp.getRowsCount();
+  /*gps_len = gps_cp.getRowsCount();
   encoder_len = encoder_cp.getRowsCount();
   steering_len = steering_cp.getRowsCount();
 
@@ -180,10 +254,10 @@ void setup()
   }
   for (int i = 0; i < steering_len; i++) {
     steering_timestamp[i] = steering_timestamp[i] / 1000.0;
-  }
+  }*/
 }
 
-void loop()
+void run_kalman(DataStream &stream)
 {
   if (!run)
   {
@@ -205,14 +279,14 @@ void loop()
   state_cov_matrix_t curr_state_cov{{1, 0, 0},
                                     {0, 1, 0},
                                     {0, 0, 1}};
-  state_cov_matrix_t process_nosie{{0.0001, 0, 0},
+  state_cov_matrix_t process_noise{{0.0001, 0, 0},
                                    {0, 0.0001, 0},
                                    {0, 0, 0.000001}};
 
   measurement_cov_matrix_t gps_noise{{0.01, 0},
                                         {0, 0.01}};
 
-  UKF Filter = UKF(1, (1 / 3), process_nosie, gps_noise);
+  UKF Filter = UKF(1, (1 / 3), process_noise, gps_noise);
 
   state_vector_t predicted_state_est;
   state_cov_matrix_t predicted_state_cov;
@@ -223,58 +297,75 @@ void loop()
   int encoder_row = 0;
   int steering_row = 0;
 
-  input_vector_t current_steering = (input_vector_t){steering[0]};
-  double last_predict_timestamp = steering_timestamp[0];
+  input_vector_t current_steering { stream.next_steering_angle };
+  double last_predict_timestamp = stream.steering_time();
   // running filter!
-  while (gps_row < gps_len && encoder_row < encoder_len && steering_row < steering_len)
+  while (!stream.finished())
   {
-    if (gps_timestamp[gps_row] < encoder_timestamp[encoder_row] && gps_timestamp[gps_row] < steering_timestamp[steering_row]) {
+    static int point = 0;
+
+    uint32_t mic0 = micros();
+
+    Measurement m = stream.next_measurement();
+    if (m == Measurement::Gps) {
       // gps is the next timestamp
       // set the new gps noise
       // predict using most recent steering and velocity
       // then update using the current gps noise
-      double dt = gps_timestamp[gps_row] - last_predict_timestamp;
+      double dt = stream.gps_time() - last_predict_timestamp;
 
-      Filter.set_gps_noise(gps_accuracy[gps_row]);
+      Filter.set_gps_noise(stream.next_gps_acc);
 
-      Filter.predict(curr_state_est, curr_state_cov, current_steering,
-      dt, predicted_state_est, predicted_state_cov);
-      Filter.update(predicted_state_est, predicted_state_cov,
-      (measurement_vector_t){pos_x[gps_row], pos_y[gps_row]}, updated_state_est, updated_state_cov);
+      Filter.predict(
+        curr_state_est, curr_state_cov, current_steering, dt,
+        predicted_state_est, predicted_state_cov
+      );
 
-      last_predict_timestamp = gps_timestamp[gps_row];
-      gps_row++;
+      Filter.update(
+        predicted_state_est, predicted_state_cov,
+        measurement_vector_t { stream.next_gps_x, stream.next_gps_y },
+        updated_state_est, updated_state_cov
+      );
+
+      last_predict_timestamp = stream.gps_time();
     }
-
-    else if (encoder_timestamp[encoder_row] < steering_timestamp[steering_row]) {
+    else if (m == Measurement::Encoder) {
       // encoder is the next timestamp
       // set the new speed stored by instance of UKF
       // predict using most recent steering and new speed
-      double dt = encoder_timestamp[encoder_row] - last_predict_timestamp;
+      double dt = stream.encoder_time() - last_predict_timestamp;
 
-      Filter.set_speed(speed[encoder_row]);
-      Filter.predict(curr_state_est, curr_state_cov, current_steering,
-      dt, predicted_state_est, predicted_state_cov);
+      Filter.set_speed(stream.next_encoder_speed);
+      Filter.predict(
+        curr_state_est, curr_state_cov, current_steering, dt,
+        predicted_state_est, predicted_state_cov
+      );
 
-      last_predict_timestamp = encoder_timestamp[encoder_row];
+      last_predict_timestamp = stream.encoder_time();
       encoder_row++;
     }
-
     else {
       // steering is the next timestamp
       // predict using this new steering
-      double dt = steering_timestamp[steering_row] - last_predict_timestamp;
+      double dt = stream.steering_time() - last_predict_timestamp;
 
       Filter.predict(curr_state_est, curr_state_cov, current_steering,
       dt, predicted_state_est, predicted_state_cov);
 
-      last_predict_timestamp = steering_timestamp[steering_row];
-      current_steering(0, 0) = steering[steering_row];
+      last_predict_timestamp = stream.steering_time();
+      current_steering(0, 0) = stream.next_steering_angle;
       steering_row++;
     }
 
+    uint32_t diff0 = micros() - mic0;
+    //Serial.printf("filter took %lu micros\n", diff0);
 
+    uint32_t mic = micros();
+    stream.advance(m);
+    uint32_t diff = micros() - mic;
+    //Serial.printf("advance took %lu micros\n", diff);
 
+    uint32_t mic2 = micros();
     filter_out.printf("%f,%f,%f,%f\n", last_predict_timestamp, updated_state_est(0, 0), updated_state_est(1, 0), updated_state_est(2, 0));
     cov_out.printf("%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", last_predict_timestamp, updated_state_cov(0, 0), updated_state_cov(0, 1), updated_state_cov(0, 2),
                    updated_state_cov(1, 0), updated_state_cov(1, 1), updated_state_cov(1, 2),
@@ -282,6 +373,22 @@ void loop()
 
     curr_state_est = updated_state_est;
     curr_state_cov = updated_state_cov;
+
+    ++point;
+
+    static int i = 0;
+    if (++i >= 1000) {
+      i = 0;
+      filter_out.flush();
+      cov_out.flush();
+
+      Serial.println("===========================\n");
+      Serial.printf("Data point %d, time %f\n", point, last_predict_timestamp);
+      Serial.println("===========================\n");
+    }
+    uint32_t diff2 = micros() - mic2;
+    //Serial.printf("printf took %lu micros\n", diff2);
+
   }
 
   filter_out.close();
@@ -289,3 +396,5 @@ void loop()
   run = false;
   Serial.println("FILTER DONE");
 }
+
+void loop() {}
