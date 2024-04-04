@@ -182,6 +182,7 @@ private:
 
     if (encoder_file.getReadError() != 0) {
       next_encoder_time = 0xFFFFFFFF;
+      return;
     }
 
     assert(sscanf(buf, "%lu,%lf", &next_encoder_time, &next_encoder_speed) == 2);
@@ -194,6 +195,7 @@ private:
 
     if (steering_file.getReadError() != 0) {
       next_steering_time = 0xFFFFFFFF;
+      return;
     }
 
     assert(sscanf(buf, "%lu,%lf", &next_steering_time, &next_steering_angle) == 2);
