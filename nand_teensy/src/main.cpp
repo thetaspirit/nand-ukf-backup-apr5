@@ -264,6 +264,9 @@ void run_kalman(DataStream &stream)
     return;
   }
 
+  SD.remove("filter.csv");
+  SD.remove("covariance.csv");
+
   /**************** Kalman Filtering! ****************/
   // output file setup
   File filter_out = SD.open("filter.csv", FILE_WRITE);
@@ -274,8 +277,13 @@ void run_kalman(DataStream &stream)
   // ukf value setup
 
   state_vector_t curr_state_est{{0, 0, 0}}; 
+
   // TODO in real buggy code, set initial x and y first gps reading
   // set heading to where it's facing in tent upon power on, probably
+  curr_state_est(0, 0) = stream.next_gps_x;
+  curr_state_est(1, 0) = stream.next_gps_y;
+  // curr_state_est(2, 0) = /* ???? */
+
   state_cov_matrix_t curr_state_cov{{1, 0, 0},
                                     {0, 1, 0},
                                     {0, 0, 1}};
@@ -292,10 +300,6 @@ void run_kalman(DataStream &stream)
   state_cov_matrix_t predicted_state_cov;
   state_vector_t updated_state_est;
   state_cov_matrix_t updated_state_cov;
-
-  int gps_row = 0;
-  int encoder_row = 0;
-  int steering_row = 0;
 
   input_vector_t current_steering { stream.next_steering_angle };
   double last_predict_timestamp = stream.steering_time();
@@ -327,6 +331,9 @@ void run_kalman(DataStream &stream)
         updated_state_est, updated_state_cov
       );
 
+      curr_state_est = updated_state_est;
+      curr_state_cov = updated_state_cov;
+
       last_predict_timestamp = stream.gps_time();
     }
     else if (m == Measurement::Encoder) {
@@ -342,7 +349,9 @@ void run_kalman(DataStream &stream)
       );
 
       last_predict_timestamp = stream.encoder_time();
-      encoder_row++;
+
+      curr_state_est = predicted_state_est;
+      curr_state_cov = predicted_state_cov;
     }
     else {
       // steering is the next timestamp
@@ -354,7 +363,9 @@ void run_kalman(DataStream &stream)
 
       last_predict_timestamp = stream.steering_time();
       current_steering(0, 0) = stream.next_steering_angle;
-      steering_row++;
+
+      curr_state_est = predicted_state_est;
+      curr_state_cov = predicted_state_cov;
     }
 
     uint32_t diff0 = micros() - mic0;
@@ -371,8 +382,6 @@ void run_kalman(DataStream &stream)
                    updated_state_cov(1, 0), updated_state_cov(1, 1), updated_state_cov(1, 2),
                    updated_state_cov(2, 0), updated_state_cov(2, 1), updated_state_cov(2, 2));
 
-    curr_state_est = updated_state_est;
-    curr_state_cov = updated_state_cov;
 
     ++point;
 
