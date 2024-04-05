@@ -139,7 +139,7 @@ state_vector_t UKF::dynamics(state_vector_t state, input_vector_t input)
   state_vector_t x;
   x(0, 0) = this->speed * cos(state(2, 0));
   x(1, 0) = this->speed * sin(state(2, 0));
-  x(2, 0) = this->speed * tan(input(0, 0)) / this->wheelbase;
+  x(2, 0) = this->speed * tan(-input(0, 0)) / this->wheelbase;
   return x;
 }
 
@@ -169,6 +169,7 @@ void UKF::set_speed(double speed) {
 }
 
 void UKF::set_gps_noise(double accuracy) {
+  accuracy = accuracy / 1000.0;
   double sigma = (accuracy / (0.848867684498)) * (accuracy / (0.848867684498));
   this->gps_noise = (measurement_cov_matrix_t){{sigma, 0}, {0, sigma}};
 }
@@ -237,9 +238,9 @@ void UKF::update(state_vector_t curr_state_est, state_cov_matrix_t curr_state_co
 
   Eigen::Matrix<double, STATE_SPACE_DIM, MEASUREMENT_SPACE_DIM> kalman_gain = cross_cov * innovation_cov.inverse();
 
-  Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
-  Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
-  Serial.printf("Kalman gain:\n%f,%f\n%f,%f\n%f,%f\n", kalman_gain(0, 0), kalman_gain(0, 1), kalman_gain(1, 0), kalman_gain(1, 1), kalman_gain(2, 0), kalman_gain(2, 1));
+  // Serial.printf("Measurement: %f, %f\n", measurement(0, 0), measurement(1, 0));
+  // Serial.printf("Predicted measurement: %f, %f\n", predicted_measurement(0, 0), predicted_measurement(1, 0));
+  // Serial.printf("Kalman gain:\n%f,%f\n%f,%f\n%f,%f\n", kalman_gain(0, 0), kalman_gain(0, 1), kalman_gain(1, 0), kalman_gain(1, 1), kalman_gain(2, 0), kalman_gain(2, 1));
   updated_state_est = curr_state_est + (kalman_gain * (measurement - predicted_measurement));
   updated_state_cov = curr_state_cov - (kalman_gain * (innovation_cov * kalman_gain.transpose()));
 }

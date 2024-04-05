@@ -84,9 +84,9 @@ public:
     next_encoder_time(0xFFFFFFFF),
     next_steering_time(0xFFFFFFFF),
 
-    gps_file(SD.open("log44-gps.csv")),
-    encoder_file(SD.open("log44-encoder.csv")),
-    steering_file(SD.open("log44-steering.csv"))
+    gps_file(SD.open("nand-lgap-gps.csv")),
+    encoder_file(SD.open("nand-lgap-encoder.csv")),
+    steering_file(SD.open("nand-lgap-steering.csv"))
   {
     if (!gps_file || !encoder_file || !steering_file) {
       while (1) {
@@ -199,6 +199,9 @@ private:
     }
 
     assert(sscanf(buf, "%lu,%lf", &next_steering_time, &next_steering_angle) == 2);
+
+    // convert degrees to radians
+    next_steering_angle = next_steering_angle * PI / 180.;
   }
 
   File gps_file;
@@ -313,6 +316,10 @@ void run_kalman(DataStream &stream)
     uint32_t mic0 = micros();
 
     Measurement m = stream.next_measurement();
+
+    Serial.printf("State cov before: %f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", last_predict_timestamp, curr_state_cov(0, 0), curr_state_cov(0, 1), curr_state_cov(0, 2),
+                   curr_state_cov(1, 0), curr_state_cov(1, 1), curr_state_cov(1, 2),
+                   curr_state_cov(2, 0), curr_state_cov(2, 1), curr_state_cov(2, 2));
     if (m == Measurement::Gps) {
       // gps is the next timestamp
       // set the new gps noise
@@ -345,10 +352,13 @@ void run_kalman(DataStream &stream)
       double dt = stream.encoder_time() - last_predict_timestamp;
 
       Filter.set_speed(stream.next_encoder_speed);
-      Filter.predict(
-        curr_state_est, curr_state_cov, current_steering, dt,
-        predicted_state_est, predicted_state_cov
-      );
+
+      if (stream.next_encoder_speed != 0) {
+        Filter.predict(
+          curr_state_est, curr_state_cov, current_steering, dt,
+          predicted_state_est, predicted_state_cov
+        );
+      }
 
       last_predict_timestamp = stream.encoder_time();
 
@@ -369,6 +379,9 @@ void run_kalman(DataStream &stream)
       curr_state_est = predicted_state_est;
       curr_state_cov = predicted_state_cov;
     }
+    Serial.printf("State cov after: %f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n", last_predict_timestamp, curr_state_cov(0, 0), curr_state_cov(0, 1), curr_state_cov(0, 2),
+                   curr_state_cov(1, 0), curr_state_cov(1, 1), curr_state_cov(1, 2),
+                   curr_state_cov(2, 0), curr_state_cov(2, 1), curr_state_cov(2, 2));
 
     uint32_t diff0 = micros() - mic0;
     //Serial.printf("filter took %lu micros\n", diff0);
